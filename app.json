@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fittbot Business",
     "slug": "fittbot-business",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "adminapp",
@@ -13,8 +13,11 @@
       "bundleIdentifier": "com.fittbot.fittbot-business",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "This app needs access to the camera to take images for community feed functionality.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to the photo library to use images for community feed functionality."
+        "NSCameraUsageDescription": "Fittbot Business needs access to the camera to capture display pictures, and upload images to the gym community feed section.",
+        "NSPhotoLibraryUsageDescription": "Fittbot Business requires access to your photo library to let you choose a display picture, and share visuals in the gym community feed.",
+        "NSMicrophoneUsageDescription": "Fittbot Business uses your microphone to let you record and share audio posts in the gym community feed, allowing members to share fitness thoughts or instructions.",
+        "NSContactsUsageDescription": "This app requires access to your contacts during referral program.",
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location only when setting up gym location for GPS based attendance for clients."
       }
     },
     "android": {
@@ -24,7 +27,8 @@
       },
       "package": "com.fittbot.fittbot_business",
       "softwareKeyboardLayoutMode": "pan",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "targetSdkVersion": 35
     },
     "web": {
       "bundler": "metro",
@@ -33,6 +37,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-av",
       [
         "expo-splash-screen",
         {
@@ -61,8 +66,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow this app to access your photos to manage gym feed.",
-          "cameraPermission": "Allow this app to access your camera to take workout progress photos for gym feed."
+          "photosPermission": "Allow Fittbot Business to access your photo library so you can set a display picture, and post images to your gym's community feed.",
+          "cameraPermission": "Allow Fittbot Business to use your camera for capturing profile pictures, and community feed posts."
         }
       ],
       [
@@ -76,7 +81,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "This app needs access to your location only when checking in at the gym."
+          "locationWhenInUsePermission": "This app needs access to your location only when setting up gym location for GPS based attendance for clients."
         }
       ]
     ],

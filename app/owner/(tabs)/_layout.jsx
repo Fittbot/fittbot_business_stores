@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, KeyboardAvoidingView, Platform } from "react-native";
 import TabNavigator from "../../../components/layout/TabNavigator";
-import RadialMenu from "../../../components/layout/RadialMenu";
 import BottomSheetMenu from "../../../components/layout/MenuSlider";
 
 export default function TabLayout() {

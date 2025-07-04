@@ -16,7 +16,7 @@ const ReceiptsCard = ({ count, newCount, onPress }) => {
         </View>
         <View style={styles.textContent}>
           <Text style={styles.title}>{count} Receipts</Text>
-          <Text style={styles.subtitle}>{newCount} new this month</Text>
+          {/* <Text style={styles.subtitle}>{newCount} new this month</Text> */}
         </View>
       </View>
       <Icon name="chevron-right" size={28} color="#999" />

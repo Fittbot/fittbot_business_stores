@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons"; // or 'react-native-vector-icons/Feather'
+import { Feather } from "@expo/vector-icons"; 
 import React from "react";
 import {
   Image,
@@ -19,9 +19,8 @@ const ReceiptModal = ({
   onDownload,
   onsubmit,
   RedButtonText,
-  gymData, // New prop for gym data from API
+  gymData, 
 }) => {
-  // Calculate GST amounts based on GST type
   const calculateGSTAmounts = () => {
     const baseAmount = invoice.total || 0;
     const gstPercentage = invoice.gstPercentage || 0;
@@ -37,7 +36,6 @@ const ReceiptModal = ({
     }
 
     if (invoice.gstType === "inclusive") {
-      // GST is included in the total amount
       const gstAmount = (baseAmount * gstPercentage) / (100 + gstPercentage);
       const subtotal = baseAmount - gstAmount;
       const cgst = gstAmount / 2;
@@ -51,7 +49,6 @@ const ReceiptModal = ({
         total: baseAmount,
       };
     } else {
-      // GST is exclusive - added on top
       const gstAmount = (baseAmount * gstPercentage) / 100;
       const cgst = gstAmount / 2;
       const sgst = gstAmount / 2;
@@ -82,12 +79,11 @@ const ReceiptModal = ({
             contentContainerStyle={styles.scrollContent}
             style={styles.scrollView}
           >
-            {/* Header */}
             <View style={styles.header}>
               <Image
                 source={{
                   uri:
-                    gymData?.logo ||
+                    gymData?.logo || gymData?.gym_logo ||
                     "https://fittbot-uploads.s3.ap-south-2.amazonaws.com/default.png",
                 }}
                 style={styles.logo}
@@ -98,10 +94,10 @@ const ReceiptModal = ({
                   {dateUtils.getCurrentDateFormatted()}
                 </Text>
                 <Text style={styles.gymName}>
-                  {gymData?.name || "Fitness Gym"}
+                  {gymData?.name|| gymData?.gym_name || "Fitness Gym"}
                 </Text>
                 <Text style={styles.gymLocation}>
-                  {gymData?.location || "Location"}
+                  {gymData?.location|| gymData?.gym_location || "Location"}
                 </Text>
                 {/* <Text style={styles.receiptInfo}>Receipt No: {invoice.id}</Text> */}
                 <Text style={styles.gstInfo}>
@@ -110,30 +106,28 @@ const ReceiptModal = ({
               </View>
             </View>
 
-            {/* Divider */}
             <View style={styles.sectionDivider} />
 
-            {/* Bill To */}
             <View
               style={[
                 styles.section,
                 { flexDirection: "row", justifyContent: "space-between" },
               ]}
             >
-              {gymData && (
+              {gymData  && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Bank Details</Text>
                   <Text style={styles.text}>
-                    Account Holder: {gymData.account_holdername}
+                    Account Holder: {gymData.account_holdername || invoice?.account_holder_name}
                   </Text>
                   <Text style={styles.text}>
-                    Account No: {gymData.account_number}
+                    Account No: {gymData.account_number|| invoice?.bankDetails}
                   </Text>
                   <Text style={styles.text}>
-                    IFSC Code: {gymData.account_ifsccode}
+                    IFSC Code: {gymData.account_ifsccode || invoice?.IFSC}
                   </Text>
                   <Text style={styles.text}>
-                    Branch: {gymData.account_branch}
+                    Branch: {gymData.account_branch || invoice?.branch}
                   </Text>
                   {gymData.upi_id && (
                     <Text style={styles.text}>UPI ID: {gymData.upi_id}</Text>
@@ -149,16 +143,15 @@ const ReceiptModal = ({
                 }}
               >
                 <Text style={styles.sectionTitle}>Paid By</Text>
-                <Text style={styles.text}>Name: {invoice.name}</Text>
-                <Text style={styles.text}>Contact: {invoice.contact}</Text>
+                <Text style={styles.text}>Name: {invoice?.name}</Text>
+                <Text style={styles.text}>Contact: {invoice?.contact}</Text>
                 <Text style={styles.text}>
                   Payment Method:{" "}
-                  {textSplitterAndCapitalizer(invoice.paymentMethod)}
+                  {textSplitterAndCapitalizer(invoice.paymentMethod || gymData?.payment_method)}
                 </Text>
               </View>
             </View>
 
-            {/* Payment Details */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Payment Details</Text>
               <View style={styles.tableHeader}>
@@ -190,7 +183,6 @@ const ReceiptModal = ({
               ))}
             </View>
 
-            {/* Show discount if applicable */}
             {invoice.discount > 0 && (
               <Text style={styles.discountText}>
                 Discount ({invoice.discount.toFixed(2)}%): -₹
@@ -201,7 +193,6 @@ const ReceiptModal = ({
               </Text>
             )}
 
-            {/* Payment Reference Number */}
             {invoice.paymentReferenceNumber && (
               <View style={styles.section}>
                 <Text style={styles.text}>
@@ -210,13 +201,11 @@ const ReceiptModal = ({
               </View>
             )}
 
-            {/* Amount Breakdown */}
             <View style={styles.footerRight}>
               <Text style={styles.text}>
                 Subtotal: ₹{gstAmounts.subtotal.toFixed(2)}
               </Text>
 
-              {/* GST Breakdown */}
               {invoice.gstType !== "no_gst" && invoice.gstPercentage > 0 && (
                 <>
                   <Text style={styles.text}>
@@ -245,9 +234,6 @@ const ReceiptModal = ({
               </Text>
             </View>
 
-            {/* Bank Details */}
-
-            {/* Footer */}
             <View style={styles.footer}>
               <View style={styles.section}>
                 <Text style={styles.thanksText}>
@@ -263,14 +249,17 @@ const ReceiptModal = ({
             </View>
           </ScrollView>
 
-          {/* Sticky Buttons */}
           <View style={styles.stickyButtonContainer}>
             <TouchableOpacity onPress={onClose} style={styles.cancelButton}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{RedButtonText? "Close":"Cancel"}</Text>
             </TouchableOpacity>
+            {
+              RedButtonText &&
+
             <TouchableOpacity onPress={onsubmit} style={styles.saveButton}>
               <Text style={styles.saveText}>{RedButtonText}</Text>
             </TouchableOpacity>
+            }
           </View>
         </View>
       </View>
@@ -381,7 +370,7 @@ const styles = StyleSheet.create({
     color: "#222",
   },
   text: {
-    fontSize: 13,
+    fontSize: 11,
     color: "#333",
     marginBottom: 3,
   },

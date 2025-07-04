@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,14 +12,16 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Platform,
+  TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import RNPickerSelect from "react-native-picker-select";
 
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import FitnessLoader from "../../components/ui/FitnessLoader";
-import { useRouter } from "expo-router";
-import { Picker } from "@react-native-picker/picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 // Import your API functions
 // These are placeholders - replace with your actual API functions
@@ -35,8 +37,146 @@ import { showToast } from "../../utils/Toaster";
 
 const { width, height } = Dimensions.get("window");
 
+// Separate SearchAndFilter Component to prevent re-rendering
+const SearchAndFilter = React.memo(
+  ({
+    searchQuery,
+    onSearchChange,
+    activeTab,
+    plans,
+    batches,
+    selectedFilter,
+    onFilterChange,
+    filteredUsersCount,
+  }) => {
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+    const filterItems = useMemo(() => {
+      if (activeTab === "Plan") {
+        return [
+          { label: "All Plans", value: null },
+          ...plans.map((plan) => ({
+            label: plan.plans,
+            value: plan.id,
+          })),
+        ];
+      } else {
+        return [
+          { label: "All Batches", value: null },
+          ...batches.map((batch) => ({
+            label: batch.batch_name,
+            value: batch.id,
+          })),
+        ];
+      }
+    }, [activeTab, plans, batches]);
+
+    const clearSearch = useCallback(() => {
+      onSearchChange("");
+    }, [onSearchChange]);
+
+    const clearFilter = useCallback(() => {
+      onFilterChange(null);
+    }, [onFilterChange]);
+
+    const clearAll = useCallback(() => {
+      onSearchChange("");
+      onFilterChange(null);
+    }, [onSearchChange, onFilterChange]);
+
+    return (
+      <View style={styles.searchAndFilterContainer}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View
+            style={[
+              styles.searchInputContainer,
+              isSearchFocused && styles.searchInputContainerFocused,
+            ]}
+          >
+            <Ionicons
+              name="search"
+              size={20}
+              color={isSearchFocused ? "#0078FF" : "#888"}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name or email..."
+              placeholderTextColor="#888"
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              onBlur={() => setIsSearchFocused(false)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={clearSearch}
+                style={styles.clearButton}
+              >
+                <Ionicons name="close-circle" size={20} color="#888" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Filter Section */}
+        <View style={styles.filterContainer}>
+          <View style={styles.filterHeader}>
+            <Text style={styles.filterLabel}>
+              Filter by {activeTab === "Plan" ? "Plan" : "Batch"}
+            </Text>
+            {(searchQuery.length > 0 || selectedFilter !== null) && (
+              <TouchableOpacity
+                onPress={clearAll}
+                style={styles.clearAllButton}
+              >
+                <Text style={styles.clearAllText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.filterPickerContainer}>
+            <RNPickerSelect
+              value={selectedFilter}
+              onValueChange={onFilterChange}
+              pickerProps={{
+                itemStyle: {
+                  color: "#000000",
+                },
+              }}
+              style={filterPickerStyles}
+              placeholder={{
+                label: `All ${activeTab === "Plan" ? "Plans" : "Batches"}`,
+                value: null,
+              }}
+              items={filterItems}
+              Icon={() => (
+                <Ionicons name="chevron-down" size={16} color="#666666" />
+              )}
+              useNativeAndroidPickerStyle={false}
+              fixAndroidTouchableBug={true}
+            />
+          </View>
+
+          {/* Results Counter */}
+          {(searchQuery.length > 0 || selectedFilter !== null) && (
+            <Text style={styles.resultsCounter}>
+              {filteredUsersCount} user{filteredUsersCount !== 1 ? "s" : ""}{" "}
+              found
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+);
+
 const ReassignmentPage = () => {
-  const [activeTab, setActiveTab] = useState("Plan");
+  const { tab } = useLocalSearchParams();
+  const [activeTab, setActiveTab] = useState(tab ? tab : "Plan");
   const [plans, setPlans] = useState([]);
   const [batches, setBatches] = useState([]);
   const [users, setUsers] = useState([]);
@@ -46,10 +186,34 @@ const ReassignmentPage = () => {
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [selectedBatchId, setSelectedBatchId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Search and Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState(null);
+
   const router = useRouter();
 
+  // Convert plans and batches to picker format
+  const planItems = useMemo(
+    () =>
+      plans.map((plan) => ({
+        label: `${plan.plans} (${plan.duration} months - ₹${plan.amount})`,
+        value: plan.id,
+      })),
+    [plans]
+  );
+
+  const batchItems = useMemo(
+    () =>
+      batches.map((batch) => ({
+        label: `${batch.batch_name} (${batch.timing})`,
+        value: batch.id,
+      })),
+    [batches]
+  );
+
   // Fetch plans, batches and users
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       const gymId = await getToken("gym_id");
@@ -91,20 +255,23 @@ const ReassignmentPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const openReassignModal = (user) => {
-    setSelectedUser(user);
-    setSelectedPlanId(activeTab === "Plan" ? user.plan_id : null);
-    setSelectedBatchId(activeTab === "Batch" ? user.batch_id : null);
-    setReassignModalVisible(true);
-  };
+  const openReassignModal = useCallback(
+    (user) => {
+      setSelectedUser(user);
+      setSelectedPlanId(activeTab === "Plan" ? user.plan_id : null);
+      setSelectedBatchId(activeTab === "Batch" ? user.batch_id : null);
+      setReassignModalVisible(true);
+    },
+    [activeTab]
+  );
 
-  const handleReassign = async () => {
+  const handleReassign = useCallback(async () => {
     if (!selectedUser) return;
 
     try {
@@ -175,27 +342,72 @@ const ReassignmentPage = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [activeTab, selectedUser, selectedPlanId, selectedBatchId, fetchData]);
 
-  const filterUsersByActiveTab = () => {
+  // Enhanced filtering function with search and filter functionality
+  const filteredUsers = useMemo(() => {
+    let result = [];
+
+    // First filter by active tab
     if (activeTab === "Plan") {
-      return users.filter((user) => user.plan_id);
+      result = users.filter((user) => user.plan_id);
     } else {
-      return users.filter((user) => user.batch_id);
+      result = users.filter((user) => user.batch_id);
     }
-  };
 
-  const getEntityName = (id, entityType) => {
-    if (!id) return "None";
-
-    if (entityType === "plan") {
-      const plan = plans.find((p) => p.id === id);
-      return plan ? plan.plans : "Unknown Plan";
-    } else {
-      const batch = batches.find((b) => b.id === id);
-      return batch ? batch.batch_name : "Unknown Batch";
+    // Apply search filter (name and email only)
+    if (searchQuery.trim() !== "") {
+      result = result.filter(
+        (user) =>
+          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (user.email &&
+            user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
     }
-  };
+
+    // Apply plan/batch filter
+    if (selectedFilter !== null) {
+      if (activeTab === "Plan") {
+        result = result.filter((user) => user.plan_id === selectedFilter);
+      } else {
+        result = result.filter((user) => user.batch_id === selectedFilter);
+      }
+    }
+
+    return result;
+  }, [users, activeTab, searchQuery, selectedFilter]);
+
+  const getEntityName = useCallback(
+    (id, entityType) => {
+      if (!id) return "None";
+
+      if (entityType === "plan") {
+        const plan = plans.find((p) => p.id === id);
+        return plan ? plan.plans : "Unknown Plan";
+      } else {
+        const batch = batches.find((b) => b.id === id);
+        return batch ? batch.batch_name : "Unknown Batch";
+      }
+    },
+    [plans, batches]
+  );
+
+  // Handle tab change and clear search/filter
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+    setSearchQuery("");
+    setSelectedFilter(null);
+  }, []);
+
+  // Handle search change
+  const handleSearchChange = useCallback((query) => {
+    setSearchQuery(query);
+  }, []);
+
+  // Handle filter change
+  const handleFilterChange = useCallback((filter) => {
+    setSelectedFilter(filter);
+  }, []);
 
   // Render the reassignment modal
   const renderReassignModal = () => {
@@ -238,35 +450,49 @@ const ReassignmentPage = () => {
                 Select New {activeTab === "Plan" ? "Plan" : "Batch"}:
               </Text>
 
-              <View style={styles.pickerContainer}>
+              <View style={pickerSelectStyles.pickerContainer}>
                 {activeTab === "Plan" ? (
-                  <Picker
-                    selectedValue={selectedPlanId}
-                    onValueChange={(itemValue) => setSelectedPlanId(itemValue)}
-                    style={styles.picker}
-                  >
-                    {plans.map((plan) => (
-                      <Picker.Item
-                        key={plan.id.toString()}
-                        label={`${plan.plans} (${plan.duration} months - ₹${plan.amount})`}
-                        value={plan.id}
-                      />
-                    ))}
-                  </Picker>
+                  <RNPickerSelect
+                    value={selectedPlanId}
+                    onValueChange={(value) => setSelectedPlanId(value)}
+                    pickerProps={{
+                      itemStyle: {
+                        color: "#000000",
+                      },
+                    }}
+                    style={pickerSelectStyles}
+                    placeholder={{
+                      label: "Select a plan...",
+                      value: null,
+                    }}
+                    items={planItems}
+                    Icon={() => (
+                      <Ionicons name="chevron-down" size={20} color="#666666" />
+                    )}
+                    useNativeAndroidPickerStyle={false}
+                    fixAndroidTouchableBug={true}
+                  />
                 ) : (
-                  <Picker
-                    selectedValue={selectedBatchId}
-                    onValueChange={(itemValue) => setSelectedBatchId(itemValue)}
-                    style={styles.picker}
-                  >
-                    {batches.map((batch) => (
-                      <Picker.Item
-                        key={batch.id.toString()}
-                        label={`${batch.batch_name} (${batch.timing})`}
-                        value={batch.id}
-                      />
-                    ))}
-                  </Picker>
+                  <RNPickerSelect
+                    value={selectedBatchId}
+                    onValueChange={(value) => setSelectedBatchId(value)}
+                    pickerProps={{
+                      itemStyle: {
+                        color: "#000000",
+                      },
+                    }}
+                    style={pickerSelectStyles}
+                    placeholder={{
+                      label: "Select a batch...",
+                      value: null,
+                    }}
+                    items={batchItems}
+                    Icon={() => (
+                      <Ionicons name="chevron-down" size={20} color="#666666" />
+                    )}
+                    useNativeAndroidPickerStyle={false}
+                    fixAndroidTouchableBug={true}
+                  />
                 )}
               </View>
             </ScrollView>
@@ -301,15 +527,60 @@ const ReassignmentPage = () => {
   };
 
   // Navigate back to the gym management page
-  const navigateBack = () => {
+  const navigateBack = useCallback(() => {
     router.push("/owner/manageplans");
-  };
+  }, [router]);
+
+  const renderUserItem = useCallback(
+    ({ item }) => (
+      <View style={styles.listItem}>
+        <View style={styles.userInfoContainer}>
+          <View style={styles.userAvatar}>
+            {item.profile ? (
+              <Image
+                source={{ uri: item.profile }}
+                style={styles.userAvatarImage}
+              />
+            ) : (
+              <Text style={styles.userAvatarText}>
+                {item.name.charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View style={styles.userDetails}>
+            <Text style={styles.userName}>{item.name}</Text>
+            <Text style={styles.userMeta}>{item.email}</Text>
+            <View style={styles.assignmentInfo}>
+              <Text style={styles.assignmentLabel}>
+                Current {activeTab === "Plan" ? "Plan" : "Batch"}:
+              </Text>
+              <Text style={styles.assignmentValue}>
+                {activeTab === "Plan"
+                  ? getEntityName(item.plan_id, "plan")
+                  : getEntityName(item.batch_id, "batch")}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.reassignButton}
+          onPress={() => openReassignModal(item)}
+          disabled={
+            (activeTab === "Plan" && plans.length < 2) ||
+            (activeTab === "Batch" && batches.length < 2)
+          }
+        >
+          <Icon name="swap-horiz" size={20} color="#0078FF" />
+          <Text style={styles.reassignButtonText}>Reassign</Text>
+        </TouchableOpacity>
+      </View>
+    ),
+    [activeTab, plans.length, batches.length, getEntityName, openReassignModal]
+  );
 
   if (isLoading) {
     return <FitnessLoader />;
   }
-
-  const filteredUsers = filterUsersByActiveTab();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -320,17 +591,10 @@ const ReassignmentPage = () => {
         }}
       />
 
-      {/* <View style={styles.headerContainer}>
-        <TouchableOpacity onPress={navigateBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back to Management</Text>
-        </TouchableOpacity>
-        <Text style={styles.pageTitle}>Reassign Users</Text>
-      </View> */}
-
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "Plan" ? styles.activeTab : null]}
-          onPress={() => setActiveTab("Plan")}
+          onPress={() => handleTabChange("Plan")}
         >
           <Text
             style={[
@@ -343,7 +607,7 @@ const ReassignmentPage = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === "Batch" ? styles.activeTab : null]}
-          onPress={() => setActiveTab("Batch")}
+          onPress={() => handleTabChange("Batch")}
         >
           <Text
             style={[
@@ -355,6 +619,18 @@ const ReassignmentPage = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Search and Filter Component */}
+      <SearchAndFilter
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        activeTab={activeTab}
+        plans={plans}
+        batches={batches}
+        selectedFilter={selectedFilter}
+        onFilterChange={handleFilterChange}
+        filteredUsersCount={filteredUsers.length}
+      />
 
       <View style={styles.listContainer}>
         <View style={styles.listHeader}>
@@ -423,67 +699,38 @@ const ReassignmentPage = () => {
         ) : filteredUsers.length === 0 ? (
           <View style={styles.noFeedContainer}>
             <MaterialCommunityIcons
-              name="account-group"
+              name={
+                searchQuery.length > 0 || selectedFilter !== null
+                  ? "account-search"
+                  : "account-group"
+              }
               size={80}
               color="#CBD5E0"
             />
             <Text style={styles.noFeedTitle}>
-              No Users with {activeTab === "Plan" ? "Plans" : "Batches"} Found
+              {searchQuery.length > 0 || selectedFilter !== null
+                ? "No Users Found"
+                : `No Users with ${
+                    activeTab === "Plan" ? "Plans" : "Batches"
+                  } Found`}
             </Text>
             <Text style={styles.noFeedSubtitle}>
-              There are no users with assigned{" "}
-              {activeTab === "Plan" ? "plans" : "batches"}.
+              {searchQuery.length > 0 || selectedFilter !== null
+                ? "No users match your search criteria"
+                : `There are no users with assigned ${
+                    activeTab === "Plan" ? "plans" : "batches"
+                  }.`}
             </Text>
           </View>
         ) : (
           <FlatList
             data={filteredUsers}
             keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.listItem}>
-                <View style={styles.userInfoContainer}>
-                  <View style={styles.userAvatar}>
-                    {item.profile ? (
-                      <Image
-                        source={{ uri: item.profile }}
-                        style={styles.userAvatarImage}
-                      />
-                    ) : (
-                      <Text style={styles.userAvatarText}>
-                        {item.name.charAt(0).toUpperCase()}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.userDetails}>
-                    <Text style={styles.userName}>{item.name}</Text>
-                    <Text style={styles.userMeta}>
-                      {item.email || item.phone}
-                    </Text>
-                    <View style={styles.assignmentInfo}>
-                      <Text style={styles.assignmentLabel}>
-                        Current {activeTab === "Plan" ? "Plan" : "Batch"}:
-                      </Text>
-                      <Text style={styles.assignmentValue}>
-                        {activeTab === "Plan"
-                          ? getEntityName(item.plan_id, "plan")
-                          : getEntityName(item.batch_id, "batch")}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.reassignButton}
-                  onPress={() => openReassignModal(item)}
-                  disabled={
-                    (activeTab === "Plan" && plans.length < 2) ||
-                    (activeTab === "Batch" && batches.length < 2)
-                  }
-                >
-                  <Icon name="swap-horiz" size={20} color="#0078FF" />
-                  <Text style={styles.reassignButtonText}>Reassign</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            renderItem={renderUserItem}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={10}
           />
         )}
       </View>
@@ -493,28 +740,83 @@ const ReassignmentPage = () => {
   );
 };
 
+// Filter Picker Styles
+const filterPickerStyles = StyleSheet.create({
+  inputIOS: {
+    fontSize: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 0,
+    borderRadius: 8,
+    color: "#333",
+    paddingRight: 40,
+    backgroundColor: "transparent",
+    minHeight: 44,
+  },
+  inputAndroid: {
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 0,
+    borderRadius: 8,
+    color: "#333",
+    paddingRight: 40,
+    backgroundColor: "transparent",
+  },
+  placeholder: {
+    color: "#999",
+    fontSize: 14,
+  },
+  iconContainer: {
+    top: Platform.OS === "ios" ? 12 : 12,
+    right: 12,
+  },
+});
+
+// RNPickerSelect Styles
+const pickerSelectStyles = StyleSheet.create({
+  pickerContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    marginBottom: 15,
+  },
+  inputIOS: {
+    fontSize: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 0,
+    borderRadius: 5,
+    color: "#333",
+    paddingRight: 40,
+    backgroundColor: "transparent",
+    minHeight: 50,
+  },
+  inputAndroid: {
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 0,
+    borderRadius: 5,
+    color: "#333",
+    paddingRight: 40,
+    backgroundColor: "transparent",
+  },
+  placeholder: {
+    color: "#999",
+    fontSize: 14,
+  },
+  iconContainer: {
+    top: Platform.OS === "ios" ? 15 : 12,
+    right: 12,
+  },
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F7F7F7",
-  },
-  headerContainer: {
-    padding: 15,
-  },
-  pageTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#0078FF",
-    textAlign: "center",
-    marginVertical: 10,
-  },
-  backButton: {
-    marginBottom: 5,
-  },
-  backButtonText: {
-    fontSize: 12,
-    color: "#0078FF",
-    fontWeight: "bold",
   },
   tabContainer: {
     flexDirection: "row",
@@ -538,6 +840,99 @@ const styles = StyleSheet.create({
     color: "#0078FF",
     fontWeight: "bold",
   },
+
+  // Search and Filter Container Styles
+  searchAndFilterContainer: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+
+  // Search Bar Styles
+  searchContainer: {
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 10,
+  },
+  searchInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    minHeight: Platform.OS === "ios" ? 44 : 48,
+  },
+  searchInputContainerFocused: {
+    borderColor: "#0078FF",
+    backgroundColor: "#ffffff",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0078FF",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#333",
+    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    paddingHorizontal: 0,
+  },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+
+  // Filter Styles
+  filterContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 15,
+  },
+  filterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  clearAllButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  clearAllText: {
+    fontSize: 12,
+    color: "#0078FF",
+    fontWeight: "500",
+  },
+  filterPickerContainer: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    marginBottom: 8,
+  },
+  resultsCounter: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+
   listContainer: {
     flex: 1,
     padding: 15,
@@ -552,6 +947,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
     color: "#0078FF",
+    flex: 1,
   },
   warningButton: {
     flexDirection: "row",
@@ -576,6 +972,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
   },
   userInfoContainer: {
     flex: 1,
@@ -693,6 +1097,14 @@ const styles = StyleSheet.create({
     padding: 0,
     elevation: 5,
     overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+      },
+    }),
   },
   modalHeader: {
     flexDirection: "row",
@@ -744,17 +1156,6 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 5,
     fontWeight: "500",
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 5,
-    marginBottom: 15,
-    backgroundColor: "#fff",
-  },
-  picker: {
-    height: 50,
-    width: "100%",
   },
   modalFooter: {
     flexDirection: "row",

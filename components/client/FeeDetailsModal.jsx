@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import RNPickerSelect from "react-native-picker-select";
 import { LinearGradient } from "expo-linear-gradient";
-
+import { Ionicons } from "@expo/vector-icons";
 const FeeDetailsModal = ({
   visible,
   onClose,
@@ -194,6 +194,11 @@ const FeeDetailsModal = ({
                     label: "Select Gym plan",
                     value: null,
                   }}
+                  pickerProps={{
+                    itemStyle: {
+                      color: "#000000",
+                    },
+                  }}
                   onValueChange={(id) => {
                     const selected = plans.find((p) => p.id === id);
                     if (selected) {
@@ -207,17 +212,16 @@ const FeeDetailsModal = ({
                     label: plan.plans,
                     value: plan.id,
                   }))}
-                  pickerProps={{
-                    itemStyle: {
-                      color: "#000000",
-                    },
-                  }}
                   style={pickerSelectStyles}
                   value={selectedPlan?.id}
+                  Icon={() => (
+                    <Ionicons name="chevron-down" size={18} color="#666666" />
+                  )}
+                  useNativeAndroidPickerStyle={false}
+                  fixAndroidTouchableBug={true}
                 />
               </View>
             </View>
-
             <View style={styles.feeRowContainer}>
               <View style={styles.feeColumn}>
                 <Text style={styles.feeLabel}>Original Fee</Text>
@@ -464,13 +468,36 @@ const FeeDetailsModal = ({
 const pickerSelectStyles = StyleSheet.create({
   inputIOS: {
     fontSize: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 12,
+    borderWidth: 0, // Remove border since container already has it
+    borderRadius: 6,
     color: "black",
+    paddingRight: 35, // Ensure text doesn't overlap with icon
+    backgroundColor: "transparent",
+    minHeight: 44,
   },
   inputAndroid: {
     fontSize: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 0, // Remove border since container already has it
+    borderRadius: 6,
     color: "black",
+    paddingRight: 35,
+    backgroundColor: "transparent",
+    minHeight: 44,
+  },
+  placeholder: {
+    color: "#999",
+    fontSize: 12,
+  },
+  iconContainer: {
+    top: Platform.OS === "ios" ? 2 : 12,
+    right: 12,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 
@@ -539,6 +566,7 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0E0",
     borderRadius: 6,
     backgroundColor: "#fff",
+    overflow: "hidden", // Add this for proper icon positioning
   },
   radioButtonContainer: {
     flexDirection: "row",

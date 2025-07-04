@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,29 +13,33 @@ import {
   SectionList,
   Image,
   Animated,
-} from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Ionicons } from '@expo/vector-icons';
+  Modal,
+  TouchableWithoutFeedback,
+} from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
 
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clientReportAPI, getClientDietAPI } from '../../services/clientApi';
-import { format } from 'date-fns';
-import { useRouter } from 'expo-router';
-import DietSummaryCard from '../Diet/DietSummaryCard';
-import MacrosDistributionChart from '../Diet/MacrosDistributionChart';
-import FoodLogCard from '../Diet/FoodLogCard';
-import HydrationCard from '../Diet/HydrationCard';
-import { showToast } from '../../utils/Toaster';
-import FitnessLoader from '../ui/FitnessLoader';
-import DateNavigator from '../ui/DateNavigator';
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clientReportAPI, getClientDietAPI } from "../../services/clientApi";
+import { format } from "date-fns";
+import { useRouter } from "expo-router";
+import DietSummaryCard from "../Diet/DietSummaryCard";
+import MacrosDistributionChart from "../Diet/MacrosDistributionChart";
+import FoodLogCard from "../Diet/FoodLogCard";
+import HydrationCard from "../Diet/HydrationCard";
+import { showToast } from "../../utils/Toaster";
+import FitnessLoader from "../ui/FitnessLoader";
+import DateNavigator from "../ui/DateNavigator";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 const ClientDietReport = (props) => {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Add temporary date state for iOS picker
+  const [tempDate, setTempDate] = useState(new Date());
   const [report, setReport] = useState(null);
   const [consumedFoods, setConsumedFoods] = useState([]);
   const [chartData, setChartData] = useState(null);
@@ -48,16 +52,37 @@ const ClientDietReport = (props) => {
   const isToday = selectedDate.toDateString() === today.toDateString();
 
   const nutritionColors = {
-    calories: '#FF5757',
-    protein: '#4CAF50',
-    carbs: '#2196F3',
-    fat: '#FFC107',
+    calories: "#FF5757",
+    protein: "#4CAF50",
+    carbs: "#2196F3",
+    fat: "#FFC107",
   };
 
+  // Updated date change handler for iOS/Android compatibility
   const showDate = (event, selected) => {
-    const currentDate = selected || selectedDate;
-    setShowDatePicker(Platform.OS === 'ios');
-    setSelectedDate(currentDate);
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (selected) {
+        setSelectedDate(selected);
+      }
+    } else {
+      // iOS - just update temp date
+      if (selected) {
+        setTempDate(selected);
+      }
+    }
+  };
+
+  // iOS picker confirmation handlers
+  const confirmDateSelection = () => {
+    setSelectedDate(tempDate);
+    setShowDatePicker(false);
+  };
+
+  // Cancel handler for iOS
+  const cancelDateSelection = () => {
+    setTempDate(selectedDate);
+    setShowDatePicker(false);
   };
 
   const getReportDetails = async () => {
@@ -67,7 +92,7 @@ const ClientDietReport = (props) => {
     try {
       const response = await clientReportAPI(
         clientId,
-        dateString?.split('T')[0]
+        dateString?.split("T")[0]
       );
       if (response?.status === 200) {
         setReport(response?.data);
@@ -87,16 +112,16 @@ const ClientDietReport = (props) => {
         });
       } else {
         showToast({
-          type: 'error',
-          title: 'Error',
-          desc: response?.detail || 'Could not fetch report data',
+          type: "error",
+          title: "Error",
+          desc: response?.detail || "Could not fetch report data",
         });
       }
     } catch (error) {
       showToast({
-        type: 'error',
-        title: 'Error',
-        desc: 'Something went wrong. Please try again later',
+        type: "error",
+        title: "Error",
+        desc: "Something went wrong. Please try again later",
       });
     }
   };
@@ -106,22 +131,22 @@ const ClientDietReport = (props) => {
     try {
       const response = await getClientDietAPI(
         clientId,
-        selectedDate?.toISOString().split('T')[0]
+        selectedDate?.toISOString().split("T")[0]
       );
       if (response?.status === 200) {
         setConsumedFoods(response?.data || []);
       } else {
         showToast({
-          type: 'error',
-          title: 'Error',
-          desc: response?.detail || 'Could not fetch diet data',
+          type: "error",
+          title: "Error",
+          desc: response?.detail || "Could not fetch diet data",
         });
       }
     } catch (error) {
       showToast({
-        type: 'error',
-        title: 'Error',
-        desc: 'Something went wrong. Please try again later',
+        type: "error",
+        title: "Error",
+        desc: "Something went wrong. Please try again later",
       });
     } finally {
       setIsLoading(false);
@@ -147,12 +172,12 @@ const ClientDietReport = (props) => {
       .filter((food) => {
         const formattedSelectedDate =
           selectedDate instanceof Date
-            ? selectedDate.toISOString().split('T')[0]
+            ? selectedDate.toISOString().split("T")[0]
             : selectedDate;
         return food.date === formattedSelectedDate;
       })
       .reduce((groups, food) => {
-        const timeKey = food.timeAdded || 'Unknown';
+        const timeKey = food.timeAdded || "Unknown";
         if (!groups[timeKey]) {
           groups[timeKey] = [];
         }
@@ -186,7 +211,46 @@ const ClientDietReport = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {showDatePicker && (
+      {/* iOS Date Picker Modal */}
+      {Platform.OS === "ios" && showDatePicker && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          visible={showDatePicker}
+          onRequestClose={cancelDateSelection}
+        >
+          <TouchableWithoutFeedback onPress={cancelDateSelection}>
+            <View style={styles.pickerModalContainer}>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.pickerContainer}>
+                  <View style={styles.pickerHeader}>
+                    <TouchableOpacity onPress={cancelDateSelection}>
+                      <Text style={styles.pickerCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.pickerTitle}>Select Date</Text>
+                    <TouchableOpacity onPress={confirmDateSelection}>
+                      <Text style={styles.pickerConfirmText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={tempDate}
+                    mode="date"
+                    display="spinner"
+                    themeVariant="light"
+                    textColor="#000000"
+                    onChange={showDate}
+                    maximumDate={today}
+                    style={styles.iosPickerStyle}
+                  />
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+
+      {/* Android Date Picker */}
+      {Platform.OS === "android" && showDatePicker && (
         <DateTimePicker
           value={selectedDate}
           mode="date"
@@ -209,36 +273,39 @@ const ClientDietReport = (props) => {
             selectedDate={selectedDate}
             today={new Date()}
             navigateDate={navigateDate}
-            setShowDatePicker={setShowDatePicker}
+            setShowDatePicker={() => {
+              setTempDate(selectedDate);
+              setShowDatePicker(true);
+            }}
             selectDayFromStrip={selectDayFromStrip}
           />
         </View>
 
         <DietSummaryCard
-          totalCalories={report?.client_actual?.calories?.target || '0'}
-          consumedCalories={report?.client_actual?.calories?.actual || 'NA'}
+          totalCalories={report?.client_actual?.calories?.target || "0"}
+          consumedCalories={report?.client_actual?.calories?.actual || "NA"}
           macros={[
             {
-              label: 'Protein',
+              label: "Protein",
               value: report?.client_actual?.protein?.actual || 0,
               width: 22,
               color: nutritionColors.protein,
-              icon: require('../../assets/images/diet/protein.png'),
+              icon: require("../../assets/images/diet/protein.png"),
             },
             {
-              label: 'Carbs',
+              label: "Carbs",
               value: report?.client_actual?.carbs?.actual || 0,
               width: 22,
               color: nutritionColors.carbs,
-              icon: require('../../assets/images/diet/carb.png'),
+              icon: require("../../assets/images/diet/carb.png"),
             },
 
             {
-              label: 'Fat',
+              label: "Fat",
               value: report?.client_actual?.fat?.actual || 0,
               width: 17,
               color: nutritionColors.fat,
-              icon: require('../../assets/images/diet/fat.png'),
+              icon: require("../../assets/images/diet/fat.png"),
             },
           ]}
         />
@@ -250,27 +317,27 @@ const ClientDietReport = (props) => {
           <MacrosDistributionChart
             macrosData={[
               {
-                name: 'Proteins',
+                name: "Proteins",
                 percentage: Number(chartData?.protein),
-                color: '#338ED9',
+                color: "#338ED9",
               },
-              { name: 'grey', percentage: 1.5, color: '#D9D9D9' },
+              { name: "grey", percentage: 1.5, color: "#D9D9D9" },
               {
-                name: 'Carbs',
+                name: "Carbs",
                 percentage: Number(chartData?.carbs),
-                color: '#06B23F',
+                color: "#06B23F",
               },
-              { name: 'grey', percentage: 1.5, color: '#D9D9D9' },
+              { name: "grey", percentage: 1.5, color: "#D9D9D9" },
               {
-                name: 'Fats',
+                name: "Fats",
                 percentage: Number(chartData?.fat),
-                color: '#EAA421',
+                color: "#EAA421",
               },
-              { name: 'grey', percentage: 1.5, color: '#D9D9D9' },
+              { name: "grey", percentage: 1.5, color: "#D9D9D9" },
             ]}
           />
         ) : (
-          ''
+          ""
         )}
         <FoodLogCard
           selectedDate={selectedDate}
@@ -290,7 +357,7 @@ const ClientDietReport = (props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F7F7',
+    backgroundColor: "#F7F7F7",
   },
   scrollContent: {
     paddingHorizontal: 15,
@@ -303,15 +370,15 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 18,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-    color: '#FF5757',
+    fontWeight: "600",
+    textDecorationLine: "underline",
+    color: "#FF5757",
   },
   card: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -319,7 +386,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     paddingHorizontal: 15,
     paddingTop: 15,
   },
@@ -327,8 +394,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   nutritionRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 10,
     marginBottom: 20,
   },
@@ -337,85 +404,85 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   nutritionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 5,
   },
   nutritionLabel2: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   nutritionValue2: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
   },
   progressContainer: {
     height: 8,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: "#E0E0E0",
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressBar: {
-    height: '100%',
+    height: "100%",
   },
   // Food log styles from FoodTracker
   foodList: {
     paddingVertical: 5,
   },
   foodCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 15,
     padding: 15,
     margin: 5,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
   foodCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 10,
   },
   foodTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   foodCardTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 8,
   },
   nutritionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 10,
   },
   nutritionItem: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   nutritionValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   nutritionLabel: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   nutritionDivider: {
     width: 1,
-    height: '100%',
-    backgroundColor: '#E0E0E0',
+    height: "100%",
+    backgroundColor: "#E0E0E0",
   },
   quantityText: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
     // marginTop: 8,
     marginLeft: 6,
   },
@@ -427,24 +494,62 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     marginBottom: 5,
-    width: '38%',
-    display: 'flex',
-    alignItems: 'left',
-    justifyContent: 'left',
+    width: "38%",
+    display: "flex",
+    alignItems: "left",
+    justifyContent: "left",
   },
   timeHeaderText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+    fontWeight: "500",
+    color: "#666",
   },
   emptyContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
+    color: "#666",
+    fontStyle: "italic",
+  },
+  // iOS Picker Modal Styles (added from previous examples)
+  pickerModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  pickerConfirmText: {
+    fontSize: 16,
+    color: "#FF5757",
+    fontWeight: "600",
+  },
+  iosPickerStyle: {
+    height: 200,
+    width: "100%",
   },
 });
 

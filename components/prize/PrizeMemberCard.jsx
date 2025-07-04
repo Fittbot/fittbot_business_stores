@@ -8,20 +8,25 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 
-// Individual card component
-const PrizeMemberCard = ({ member }) => {
+const PrizeMemberCard = ({ member, onCardClick, onButtonClick }) => {
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onCardClick}>
       <View style={styles.cardHeader}>
-        <Image
-          source={require('../../assets/images/user_1.png')}
-          style={styles.profileImage}
-          contentFit="cover"
-        />
+        {
+          member.image_url?
+          <Image
+            source={member.image_url? {uri:member.image_url}: ""}
+            style={styles.profileImage}
+            contentFit="cover"
+          />:
+          <View style={styles.avatarRound}>
+            <Text style={styles.avatarText}>{member.client_name.charAt(0)}</Text>
+          </View>
+        }
         <View style={styles.headerText}>
-          <Text style={styles.memberName}>{member.name}</Text>
-          <Text style={styles.memberId}>ID: {member.memberId}</Text>
+          <Text style={styles.memberName}>{member.client_name}</Text>
+          <Text style={styles.memberId}>ID: {member.gym_client_id}</Text>
         </View>
       </View>
 
@@ -31,7 +36,7 @@ const PrizeMemberCard = ({ member }) => {
             source={require('../../assets/images/prize/gift_icon.png')}
             style={[
               styles.giftIcon,
-              { marginLeft: member.prize.length > 20 ? 25 : 0 },
+              { marginLeft: member.gift.length > 20 ? 25 : 0 },
             ]}
             contentFit="cover"
           />
@@ -40,17 +45,17 @@ const PrizeMemberCard = ({ member }) => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            scrollEnabled={member.prize.length > 15}
+            scrollEnabled={member.gift.length > 15}
             contentContainerStyle={styles.scrollContent}
           >
             <Text
               style={[
                 styles.prizeText,
-                member.prize.length > 20 && { paddingRight: 20 }, // Add padding if scrollable
+                member.gift.length > 20 && { paddingRight: 20 }, 
               ]}
               numberOfLines={1}
             >
-              {member.prize}
+              {member.gift}
             </Text>
           </ScrollView>
         </View>
@@ -59,21 +64,21 @@ const PrizeMemberCard = ({ member }) => {
       <View style={styles.detailsContainer}>
         <View style={styles.dateContainer}>
           <Text style={styles.clockIcon}>⏱</Text>
-          <Text style={styles.dateText}>{member.date}</Text>
+          <Text style={styles.dateText}>{member.given_date? member.given_date.split("T")[0] : member.achieved_date.split("T")[0]}</Text>
         </View>
         <Text style={styles.xpText}>XP:{member.xp}</Text>
       </View>
 
       {member.is_given ? (
-        <TouchableOpacity style={styles.givePrizeButton}>
+        <TouchableOpacity style={styles.givePrizeButton} onPress={onButtonClick}>
           <Text style={styles.buttonText}>Given</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity style={styles.givePrizeButton}>
+        <TouchableOpacity style={styles.givePrizeButton} onPress={onButtonClick}>
           <Text style={styles.buttonText}>Give Prize</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -147,6 +152,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+
+  avatarRound:{
+    width:30,
+    height:30,
+    borderRadius:50,
+    borderWidth:2,
+    borderColor:'#0085FF',
+    flexDirection:'row',
+    alignItems:'center',
+    justifyContent:'center',
+    marginRight:10,
+  },
+
+  avatarText:{
+    color:'#0085FF',
+    fontWeight:'600'
+  },
+
   detailsContainer: {
     marginBottom: 16,
     alignItems: 'center',

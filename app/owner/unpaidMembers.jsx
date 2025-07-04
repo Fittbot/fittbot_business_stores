@@ -17,6 +17,7 @@ import SearchBarWithFilterButton from "../../components/ui/SearchBarWithMonthFil
 import MonthSelectorModal from "../../components/home/MonthSelectorModal";
 import InvoiceModal from "../../components/home/Invoice";
 import { getToken } from "../../utils/auth";
+import { dateUtils } from "../../utils/date";
 
 const monthList = [
   "January",
@@ -36,10 +37,10 @@ const monthList = [
 const UnpaidMembersListPage = () => {
   const date = new Date();
   const [showInvoice, SetShowInvoice] = useState(false);
-  const [invoiceData, setInvoiceData] = useState({ send: [], unsend: [] }); // Initialize with send/unsend arrays
+  const [invoiceData, setInvoiceData] = useState({ send: [], unsend: [] }); 
   const [particularInvoiceData, setParticularInvoiceData] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("Sent"); // Retain tabs, assuming 'Sent' and 'Unsent' for unpaid
+  const [activeTab, setActiveTab] = useState("Sent"); 
   const [searchQuery, setSearchQuery] = useState("");
   const [localSelectedMonth, setLocalSelectedMonth] = useState(
     monthList[date.getMonth()]
@@ -49,7 +50,6 @@ const UnpaidMembersListPage = () => {
   );
   const [showMonthModal, setShowMonthModal] = useState(false);
 
-  // Filtered and paginated data states
   const [filteredAndSearchedUsers, setFilteredAndSearchedUsers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
@@ -57,8 +57,6 @@ const UnpaidMembersListPage = () => {
 
   const searchInputRef = useRef(null);
 
-  // This state was in ClientEstimate but not used in UnpaidMembersListPage for its own logic.
-  // Including it for structural consistency as requested, but it might not be functionally needed here.
   const [isAboutToExpireModalOpen, setIsAboutToExpireModalOpen] =
     useState(true);
 
@@ -67,21 +65,19 @@ const UnpaidMembersListPage = () => {
   const fetchUnpaidMembersData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const gymId = await getToken("gym_id");
-      if (!gymId) {
+      const gym_id = await getToken("gym_id");
+      if (!gym_id) {
         showToast({ type: "error", title: "Gym ID is not available." });
         return;
       }
 
-      // API call for unpaid members data, including month/year filters
       const response = await getmembersDataAPI(
-        gymId,
+        gym_id,
         localSelectedMonth,
         localSelectedYear
       );
 
       if (response?.status === 200) {
-        // Assuming the API returns unpaid_data with send/unsend structure
         setInvoiceData(response?.data?.unpaid_data || { send: [], unsend: [] });
       } else {
         showToast({
@@ -100,14 +96,12 @@ const UnpaidMembersListPage = () => {
     }
   }, [localSelectedMonth, localSelectedYear]);
 
-  // Fetch data on component mount and when month/year changes
   useFocusEffect(
     useCallback(() => {
       fetchUnpaidMembersData();
     }, [fetchUnpaidMembersData])
   );
 
-  // Effect for filtering and searching data
   useEffect(() => {
     const dataToFilter =
       activeTab === "Sent" ? invoiceData.send : invoiceData.unsend;
@@ -120,7 +114,7 @@ const UnpaidMembersListPage = () => {
         user.client_contact?.includes(searchQuery)
     );
     setFilteredAndSearchedUsers(filtered);
-    setCurrentPage(1); // Reset to first page whenever filters or search change
+    setCurrentPage(1); 
   }, [activeTab, invoiceData, searchQuery]);
 
   const handleMonthSelection = useCallback((month) => {
@@ -133,8 +127,7 @@ const UnpaidMembersListPage = () => {
 
   const handleApplyMonthFilter = useCallback(() => {
     setShowMonthModal(false);
-    fetchUnpaidMembersData(); // Re-fetch data with new month/year
-  }, [fetchUnpaidMembersData]);
+  }, []);
 
   const tabs = [
     { id: "Sent", label: "Sent" },
@@ -150,8 +143,6 @@ const UnpaidMembersListPage = () => {
     searchInputRef.current?.focus();
   }, []);
 
-  // This handler was in ClientEstimate but not strictly needed for UnpaidMembersListPage's core logic
-  // as isAboutToExpireModalOpen is always true. Included for structural consistency.
   const handleOpenAboutToExpireModal = () => {
     setIsAboutToExpireModalOpen(!isAboutToExpireModalOpen);
   };
@@ -180,6 +171,7 @@ const UnpaidMembersListPage = () => {
           onFilterPress={() => setShowMonthModal(true)}
           selectedMonth={localSelectedMonth}
           selectedYear={localSelectedYear}
+          showFilter={true} 
           ref={searchInputRef}
         />
       </View>
@@ -203,10 +195,10 @@ const UnpaidMembersListPage = () => {
         <RenderAboutToExpirePage
           SetShowInvoice={SetShowInvoice}
           setParticularInvoiceData={setParticularInvoiceData}
-          fetchInvoiceData={fetchUnpaidMembersData} // Use the specific fetch function for this page
+          fetchInvoiceData={fetchUnpaidMembersData} 
           activeTab={activeTab}
           heading={"Unpaid Members List"}
-          title={"Unpaid Members"} // Title for the RenderAboutToExpirePage, adjusted
+          title={"Unpaid Members"} 
           allUsers={filteredAndSearchedUsers}
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
@@ -214,46 +206,60 @@ const UnpaidMembersListPage = () => {
           flatListRef={flatListRef}
           localSelectedMonth={localSelectedMonth}
           localSelectedYear={localSelectedYear}
-          isAboutToExpireModalOpen={isAboutToExpireModalOpen} // Included for consistency
-          handleOpenAboutToExpireModal={handleOpenAboutToExpireModal} // Included for consistency
+          isAboutToExpireModalOpen={isAboutToExpireModalOpen} 
+          handleOpenAboutToExpireModal={handleOpenAboutToExpireModal} 
         />
       )}
 
+    
       <InvoiceModal
         visible={showInvoice}
         onClose={() => SetShowInvoice(false)}
+        RedButtonText="Send Invoice"
+        gymData={{
+          name: particularInvoiceData?.gym_name,
+          location: particularInvoiceData?.gym_location,
+          logo: particularInvoiceData?.gym_logo,
+          gst_number: particularInvoiceData?.gst_number,
+          account_holdername: particularInvoiceData?.account_holder_name,
+          account_number: particularInvoiceData?.account_number || "XXXXXXXXXX",
+          account_ifsccode: particularInvoiceData?.ifsc_code || "",
+          account_branch: particularInvoiceData?.branch || "",
+          upi_id: particularInvoiceData?.upi_id || "",
+        }}
         invoice={{
-          id: particularInvoiceData?.invoice_number,
-          name: particularInvoiceData?.account_holder_name,
-          contact: particularInvoiceData?.client_contact,
-          paymentMethod: "Stripe / Bank Transfer",
-          bankDetails: `${particularInvoiceData?.bank_details}, IFSC: ${particularInvoiceData?.ifsc_code}`,
-          discount: particularInvoiceData?.discount,
-          total: particularInvoiceData?.discounted_fees,
-          gymName: particularInvoiceData?.gym_name,
-          gymAddress: "123 Fitness St, Gym City, USA", // Placeholder
-          gymLogo: particularInvoiceData?.gym_logo,
+          invoice_number:particularInvoiceData?.invoice_number||"",
+          name: particularInvoiceData?.account_holder_name || "Client Name",
+          contact: particularInvoiceData?.client_contact || "+91 XXXXXXXXXX",
+          paymentReferenceNumber: particularInvoiceData?.payment_reference_number || "",
+          bankDetails: particularInvoiceData?.bank_details, 
+          IFSC: particularInvoiceData?.ifsc_code,
+          fees:particularInvoiceData?.fees,
+          discount: particularInvoiceData?.discount || 0,
+          discountedFees: particularInvoiceData?.discounted_fees || particularInvoiceData?.fees,
+          gymName: particularInvoiceData?.gym_name || "Fitness Gym",
+          gymAddress: particularInvoiceData?.gym_location || "Gym Address",
+          gstType: "inclusive", 
+          gstPercentage: 18, 
           items: [
             {
-              date: particularInvoiceData?.due_date,
-              description: particularInvoiceData?.plan_description,
-              amount: particularInvoiceData?.fees,
+              date: particularInvoiceData?.due_date?.split(" ")[0] || dateUtils.getCurrentDateFormatted(),
+              description: particularInvoiceData?.plan_description || "Gym Membership",
+              method: "Bank Transfer",
+              amount: particularInvoiceData?.fees || 0,
             },
           ],
         }}
-        // onDownload prop can be passed if download functionality is implemented for unpaid invoices.
-        // Keeping it commented out for now as per ClientEstimate example.
-        // onDownload={() => { /* implement download logic if needed */ }}
       />
+      
     </SafeAreaView>
   );
 };
 
-// Styles copied directly from ClientEstimate.js
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA", // Adjusted to match ClientEstimate
+    backgroundColor: "#F5F7FA", 
   },
   searchAndFilterContainer: {
     width: "100%",

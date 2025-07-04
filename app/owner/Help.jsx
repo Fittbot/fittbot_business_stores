@@ -229,7 +229,6 @@ const HelpSupportScreen = () => {
 
         const response = await supportAPI(payload);
         if (response?.status === 200) {
-          console.log(response);
           setToken(response?.data);
           setShowSuccess(true);
           setTimeout(() => {

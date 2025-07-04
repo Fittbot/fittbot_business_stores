@@ -1,29 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import debounce from 'lodash.debounce';
+import React, { useState, useEffect, useRef } from "react";
+import { View, TextInput, StyleSheet, Platform } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import debounce from "lodash.debounce";
 
 const SearchBar111 = ({
   data = [],
   onSearch,
-  searchKeys = ['name'],
-  placeholder = 'Search...',
+  searchKeys = ["name"],
+  placeholder = "Search...",
   debounceDelay = 300,
   style = {},
   inputStyle = {},
 }) => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
 
   const debouncedSearch = useRef(
     debounce((text) => {
-      if (text.trim() === '') {
+      if (text.trim() === "") {
         onSearch(data, text);
         return;
       }
 
       const filtered = data.filter((item) =>
         searchKeys.some((key) =>
-          (item[key] || '')
+          (item[key] || "")
             .toString()
             .toLowerCase()
             .includes(text.toLowerCase())
@@ -63,15 +63,15 @@ export default SearchBar111;
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
     paddingHorizontal: 12,
     paddingVertical: 4,
     marginBottom: 10,
     borderRadius: 8,
     borderWidth: 0.5,
-    borderColor: 'rgba(0, 0, 0, 0.10)',
+    borderColor: "rgba(0, 0, 0, 0.10)",
   },
   icon: {
     marginRight: 8,
@@ -79,6 +79,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 12,
-    color: '#2c3e50',
+    color: "#2c3e50",
+    height: Platform.OS === "ios" ? 30 : "auto",
   },
 });

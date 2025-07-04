@@ -1,5 +1,5 @@
-import { Stack } from 'expo-router';
-import React from 'react';
+import { Stack } from "expo-router";
+import React from "react";
 
 export default function FeedLayout() {
   return (
@@ -8,8 +8,14 @@ export default function FeedLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="addOfferFormPage" options={{ headerShown: false }} />
-      <Stack.Screen name="addNewAnnouncementFormPage" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="addOfferFormPage"
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="addNewAnnouncementFormPage"
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
     </Stack>
   );
 }

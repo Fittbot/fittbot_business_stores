@@ -5,6 +5,7 @@ import {
   Animated,
   BackHandler,
   Dimensions,
+  Platform,
   SafeAreaView,
   StyleSheet,
   View,
@@ -31,6 +32,8 @@ import useFeedSocket from "../../../context/useFeedSocket";
 import { addPunchOutAPI } from "../../../services/clientApi";
 import useBackHandler from "../../../hooks/useBackHandler";
 import { showToast } from "../../../utils/Toaster";
+// ADD THIS IMPORT
+import useEdgeSwipe from "../../../hooks/useEdgeSwipe";
 
 const RenderAnalyticsTab = lazy(() =>
   import("../../../components/home/LiveAnalyticsTab")
@@ -221,6 +224,28 @@ const Dashboard = () => {
   const scrollY = useState(new Animated.Value(0))[0];
   const { isSideNavVisible, closeSideNav, toggleSideNav } = useNavigation();
 
+  // ADD EDGE SWIPE IMPLEMENTATION
+  const {
+    panHandlers,
+    SwipeIndicator,
+    isSwipeActive,
+    isEnabled: swipeEnabled,
+    swipeAnimatedValue,
+    resetSwipe,
+    debug,
+    temporarilyDisableSwipe,
+  } = useEdgeSwipe({
+    onSwipeComplete: toggleSideNav,
+    isEnabled: true,
+    isBlocked: isSideNavVisible,
+    config: {
+      edgeSwipeThreshold: 30,
+      swipeMinDistance: 50,
+      swipeMinVelocity: 0.3,
+      preventIOSBackSwipe: true,
+    },
+  });
+
   // User data
   const userData = {
     name: "Yesh Singh",
@@ -246,33 +271,113 @@ const Dashboard = () => {
   const toggleAttendanceModal = () =>
     setAttendanceModalVisible(!isAttendanceModalVisible);
 
+  const handleHeaderTabChange = (tab) => {
+    setActiveTabHeader(tab);
+    scrollY.setValue(0);
+    // Temporarily disable swipe when changing tabs to prevent conflicts
+    temporarilyDisableSwipe();
+  };
+
   const getGymLocation = async () => {
     setIsLocationLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      // Check if we have location permission first
+      const { status, canAskAgain } =
+        await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status);
 
       if (status !== "granted") {
-        showToast({
-          type: "error",
-          title: "Location permission is required to set your gym's location.",
-        });
         setIsLocationLoading(false);
+
+        if (!canAskAgain) {
+          Alert.alert(
+            "Permission Blocked",
+            "Location access has been blocked. Please enable it manually from your phone's settings.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Open Settings",
+                onPress: () => {
+                  Linking.openSettings();
+                },
+              },
+            ]
+          );
+        } else {
+          showToast({
+            type: "error",
+            title:
+              "Location permission is required to set your gym's location.",
+          });
+        }
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
+      // Add a small delay to ensure permission is fully processed on iOS
+      if (Platform.OS === "ios") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // Now try to get location with proper accuracy settings and retry logic
+      let location = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!location && attempts < maxAttempts) {
+        try {
+          location = await Location.getCurrentPositionAsync({
+            // Use proper LocationAccuracy enum values for each platform
+            accuracy:
+              Platform.OS === "android"
+                ? Location.LocationAccuracy.High
+                : Location.LocationAccuracy.Best,
+            maximumAge: 10000, // Accept cached location up to 10 seconds old
+            timeout: 10000, // 10 second timeout
+          });
+          break;
+        } catch (locationError) {
+          attempts++;
+          console.log(`Location attempt ${attempts} failed:`, locationError);
+          if (attempts < maxAttempts) {
+            // Wait a bit before retrying
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          } else {
+            throw locationError;
+          }
+        }
+      }
+
+      if (!location) {
+        throw new Error("Unable to get location after multiple attempts");
+      }
 
       setIsLocationLoading(false);
       return location.coords;
     } catch (error) {
+      setIsLocationLoading(false);
+      console.error("Location error:", error);
+
+      // Provide more specific error messages based on error type
+      let errorMessage =
+        "Could not get your current location. Please try again.";
+
+      if (error.message.includes("denied")) {
+        errorMessage =
+          "Location access was denied. Please enable location permissions in settings.";
+      } else if (error.message.includes("timeout")) {
+        errorMessage = "Location request timed out. Please try again.";
+      } else if (error.message.includes("unavailable")) {
+        errorMessage =
+          "Location services are unavailable. Please check your device settings.";
+      } else if (error.message.includes("multiple attempts")) {
+        errorMessage =
+          "Unable to get accurate location. Please ensure location services are enabled and try again.";
+      }
+
       showToast({
         type: "error",
-        title: "Could not get your current location. Please try again.",
+        title: errorMessage,
       });
-      setIsLocationLoading(false);
     }
   };
 
@@ -446,6 +551,28 @@ const Dashboard = () => {
     }, [])
   );
 
+  // Handle back button - ADD SIDE NAV CLOSE HANDLING
+  useFocusEffect(
+    useCallback(() => {
+      const backAction = () => {
+        if (isSideNavVisible) {
+          closeSideNav();
+          return true;
+        }
+        return false;
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        backAction
+      );
+
+      return () => {
+        backHandler.remove();
+      };
+    }, [isSideNavVisible, closeSideNav])
+  );
+
   const handleWorkoutStatsScroll = (event) => {
     const contentOffset = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffset / (width * 0.9));
@@ -456,11 +583,6 @@ const Dashboard = () => {
     const contentOffset = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffset / (width * 0.9));
     setSelectedClientListIndex(index);
-  };
-
-  const handleHeaderTabChange = (tab) => {
-    setActiveTabHeader(tab);
-    scrollY.setValue(0);
   };
 
   const renderContent = () => {
@@ -562,7 +684,7 @@ const Dashboard = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panHandlers}>
       <Suspense fallback={<View style={styles.headerPlaceholder} />}>
         <HeaderComponent
           showHeader={true}
@@ -627,6 +749,9 @@ const Dashboard = () => {
           isLocationLoading={isLocationLoading}
         />
       </Suspense>
+
+      {/* ADD SWIPE INDICATOR */}
+      <SwipeIndicator />
     </View>
   );
 };
@@ -638,6 +763,15 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerPlaceholder: {
+    height: 180,
+    backgroundColor: "#F7F7F7",
   },
   backgroundGradient: {
     flex: 1,

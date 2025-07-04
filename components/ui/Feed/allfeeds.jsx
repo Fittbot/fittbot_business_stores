@@ -277,7 +277,7 @@ const AllFeed = ({ onScroll, scrollEventThrottle, headerHeight }) => {
       }
     } catch (error) {
       showToast({
-        type: "Error",
+        type: "error",
         title: "Error preloading audio",
       });
     }
@@ -1286,6 +1286,8 @@ const AllFeed = ({ onScroll, scrollEventThrottle, headerHeight }) => {
       }
       const response = await getFeedPostAPI(gymId, clientId, "owner");
       if (response?.status === 200) {
+        console.log(response?.data[0].media);
+        
         setFeed(response?.data);
       } else if (response?.status === 201) {
         setFeed([]);

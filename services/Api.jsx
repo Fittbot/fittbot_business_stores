@@ -301,26 +301,45 @@ export const getGymHomeDataAPI = async (gym_id) => {
   }
 };
 
-export const getmembersDataAPI = async (gym_id) => {
+
+export const getmembersDataAPI = async (gym_id, month = null, year = null) => {
   try {
+    const params = { gym_id };
+    if (month) {
+      params.month = month;
+    }
+    
+    if (year) {
+      params.year = year;
+    }
+
     const res = await axiosInstance.get(`/owner/members/all`, {
-      params: {
-        gym_id,
-      },
+      params,
     });
+    
     return res?.data;
   } catch (err) {
-    return err?.response.data;
+    return err?.response?.data;
   }
 };
 
-export const getCollectionSummaryAPI = async (gym_id, scope) => {
+export const getCollectionSummaryAPI = async (gym_id, scope, start_date = null, end_date = null, month = null, year = null) => {
   try {
+    const params = {
+      gym_id,
+      scope,
+    };
+
+    if (scope === 'custom_interval' && start_date && end_date) {
+      params.start_date = start_date;
+      params.end_date = end_date;
+    } else if (scope === 'specific_month_year' && month && year) {
+      params.month = month;
+      params.year = year;
+    }
+
     const res = await axiosInstance.get(`/ledger/collection_summary`, {
-      params: {
-        gym_id,
-        scope,
-      },
+      params,
     });
     return res?.data;
   } catch (err) {
@@ -752,7 +771,7 @@ export const resendOTPAPI = async (data, type, role, id) => {
 
 export const getRewardsAPI = async (gym_id) => {
   try {
-    const res = await axiosInstance.get(`/owner/gym/get_rewards`, {
+    const res = await axiosInstance.get(`/rewards_section/get_rewards`, {
       params: {
         gym_id,
       },
@@ -765,7 +784,7 @@ export const getRewardsAPI = async (gym_id) => {
 
 export const createRewardAPI = async (payload) => {
   try {
-    const res = await axiosInstance.post(`/owner/gym/create_rewards`, payload);
+    const res = await axiosInstance.post(`/rewards_section/create_rewards`, payload);
     return res?.data;
   } catch (err) {
     return err?.response.data;
@@ -774,18 +793,19 @@ export const createRewardAPI = async (payload) => {
 
 export const updateRewardAPI = async (payload) => {
   try {
-    const res = await axiosInstance.put(`/owner/gym/update_rewards`, payload);
+    const res = await axiosInstance.put(`/rewards_section/update_rewards`, payload);
     return res?.data;
   } catch (err) {
     return err?.response.data;
   }
 };
 
-export const deleteRewardAPI = async (reward_id) => {
+export const deleteRewardAPI = async (reward_id, gym_id) => {
   try {
-    const res = await axiosInstance.delete(`/owner/gym/delete_rewards`, {
+    const res = await axiosInstance.delete(`/rewards_section/delete_rewards`, {
       params: {
         reward_id,
+        gym_id
       },
     });
     return res?.data;
@@ -794,11 +814,21 @@ export const deleteRewardAPI = async (reward_id) => {
   }
 };
 
-export const getPrizeListAPI = async (gym_id) => {
+export const confirmRewardImageAPI = async (payload) => {
   try {
-    const res = await axiosInstance.get(`/owner/gym/get_prize_list`, {
+    const res = await axiosInstance.post(`/rewards_section/confirm_reward_image`, payload);
+    return res?.data;
+  } catch (err) {
+    return err?.response.data;
+  }
+};
+
+export const getPrizeListAPI = async (gym_id, status) => {
+  try {
+    const res = await axiosInstance.get(`/gym_prizes/get_prizes`, {
       params: {
         gym_id,
+        status
       },
     });
     return res?.data;
@@ -938,7 +968,7 @@ export const updateUserBatchAPI = async (payload) => {
 
 export const updateGivenPrizeAPI = async (payload) => {
   try {
-    const res = await axiosInstance.put(`/owner/update-given-prize`, payload);
+    const res = await axiosInstance.put(`/gym_prizes/give_prize`, payload);
     return res?.data;
   } catch (err) {
     return err.response?.data;
@@ -1093,24 +1123,30 @@ export const SendReceiptsToPaidMembers = async (payload) => {
   }
 };
 
-export const GetReceiptForPaidMembers = async (gym_id, month, year) => {
+export const GetReceiptForPaidMembers = async (gym_id, month = null, year = null, page = 1, limit = 25) => {
   try {
+    const params = { gym_id };
+    
+    if (month) {
+      params.month = month;
+    }
+    
+    if (year) {
+      params.year = year;
+    }
+
+    if (!month || !year) {
+      params.page = page;
+      params.limit = limit;
+    }
+
     const res = await axiosInstance.get(`/owner/fees-receipts`, {
-      params: {
-        gym_id,
-        month,
-        year,
-      },
+      params,
     });
+    
     return res?.data;
   } catch (err) {
-    if (err.response && err.response.data) {
-      return err.response.data;
-    }
-    return {
-      status: 500,
-      message: 'Something went wrong. Please try again.',
-    };
+    return err?.response?.data;
   }
 };
 
@@ -1169,14 +1205,6 @@ export const getClientFromQRAPI = async (uuid) => {
     return err?.response.data;
   }
 };
-
-// /owner/gym/getsinglediettemplate
-
-// params:{
-
-// gym_id,
-// template_id
-// }
 
 export const getSingleDietTemplate = async (gym_id, template_id) => {
   try {
@@ -1369,7 +1397,7 @@ export const deleteGymAnnouncementsAPI = async (payload) => {
 
 export const getGymOffersAPI2 = async (gym_id) => {
   try {
-    const res = await axiosInstance.get(`/gym_feed/get_offer`, {
+    const res = await axiosInstance.get(`/gym_offers/get_offer`, {
       params: {
         gym_id,
       },
@@ -1391,7 +1419,7 @@ export const postGymOffersAPI = async (payload) => {
 
 export const updateGymOffersAPI = async (payload) => {
   try {
-    const res = await axiosInstance.post(`/gym_feed/update_offer`, payload);
+    const res = await axiosInstance.post(`/gym_offers/update_offer`, payload);
     return res?.data;
   } catch (err) {
     return err?.response.data;
@@ -1401,7 +1429,7 @@ export const updateGymOffersAPI = async (payload) => {
 export const deleteGymOffersAPI = async (payload) => {
   try {
     const { gym_id, offer_id } = payload;
-    const res = await axiosInstance.delete(`/gym_feed/delete_offer`, {
+    const res = await axiosInstance.delete(`/gym_offers/delete_offer`, {
       params: {
         gym_id,
         offer_id,
@@ -1413,6 +1441,39 @@ export const deleteGymOffersAPI = async (payload) => {
   }
 };
 
+export const createOfferWithImage = async (offerData) => {
+  try {
+    const response = await axiosInstance.post('/gym_offers/add_offer', offerData);
+    return response.data;
+  } catch (error) {
+    console.error('Create offer error:', error);
+    throw error;
+  }
+};
+
+export const confirmOfferImage = async (offerId, cdnUrl) => {
+  try {
+    const response = await axiosInstance.post('/gym_offers/confirm_offer_image', {
+      offer_id: offerId,
+      cdn_url: cdnUrl,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Confirm image error:', error);
+    throw error;
+  }
+};
+
+export const updateOfferWithImage = async (offerData) => {
+  try {
+    const response = await axiosInstance.post('/gym_offers/update_offer', offerData);
+    return response.data;
+  } catch (error) {
+    console.error('Create offer error:', error);
+    throw error;
+  }
+};
+
 //--------------------- Expo token api ---------------------
 
 export const updateExpoTokenAPI = async (payload) => {
@@ -1421,6 +1482,54 @@ export const updateExpoTokenAPI = async (payload) => {
       `/owner_expo/update_expo_token`,
       payload
     );
+    return res?.data;
+  } catch (err) {
+    return err?.response.data;
+  }
+};
+
+//------------------------ Brouchre Apis ------------------//
+
+export const getBrochurePresignedUrls = async (payload) => {
+  try {
+    const response = await axiosInstance.post(`/gym_brochures/presigned-urls`, payload, {
+      headers: {
+        'Content-Type': 'application/json',  
+      },
+      timeout: 30000,
+    });
+
+    if (!response) {
+      throw new Error('No response received from server');
+    }
+
+    return response.data;
+  } catch (error) {
+    showToast({
+      type: 'error',
+      title: 'API Error',
+      desc: error.message,
+    });
+  }
+};
+
+export const confirmBrochureUpload = async (payload) => {
+  try {
+    const res = await axiosInstance.post(`/gym_brochures/confirm`, payload);
+    return res?.data;
+  } catch (err) {
+    return err?.response.data;
+  }
+};
+
+
+export const deleteBrochure = async (brochure_id) => {
+  try {
+    const res = await axiosInstance.delete(`/gym_brochures/delete_brochure`, {
+      params:{
+        brochure_id
+      }
+    });
     return res?.data;
   } catch (err) {
     return err?.response.data;

@@ -8,12 +8,13 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import Swiper from "react-native-swiper";
 import ImageUploadModal from "../../components/gymPlansPage/ImageUploadModal";
 import OwnerHeader from "../../components/ui/OwnerHeader";
 import { getToken } from "../../utils/auth";
-import { PostGymPlansImages, getGymPlansImages } from "../../services/Api";
+import { PostGymPlansImages, getGymPlansImages, getBrochurePresignedUrls, confirmBrochureUpload, deleteBrochure } from "../../services/Api";
 import { showToast } from "../../utils/Toaster";
 import NoDataComponent from "../../utils/noDataComponent";
 import ImageWithFallback from "../../utils/ImagewithFallback";
@@ -21,6 +22,7 @@ import NewOwnerHeader from "../../components/ui/Header/NewOwnerHeader";
 import { useRouter } from "expo-router";
 import { FullImageModal } from "../../components/profile/FullImageModal";
 import HardwareBackHandler from "../../components/HardwareBackHandler";
+import axios from "axios";
 
 const { width } = Dimensions.get("window");
 const responsiveWidth = (percentage) => width * (percentage / 100);
@@ -30,10 +32,13 @@ const GymPlans = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [brochureId, setBrochureId] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
   const swiperRef = useRef(null);
   const [isFullImageModalVisible, setFullImageModalVisible] = useState(false);
   const [fullImageSource, setFullImageSource] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0); 
 
   const [images, setImages] = useState([]);
 
@@ -62,21 +67,17 @@ const GymPlans = () => {
       }
 
       const response = await getGymPlansImages(gym_id);
-
       if (response.status === 200) {
-        if (
-          response.data &&
-          response.data.images &&
-          response.data.images.length > 0
-        ) {
-          const serverImages = response.data.images.map((path, index) => ({
+        if (response.data && Array.isArray(response.data)) {
+          const serverImages = response.data.map((item, index) => ({
             id: `server-${index}`,
-            source: { uri: path },
-            serverPath: path,
+            source: { uri: item.images },
+            serverPath: item.images,
+            brochureId: item.brouchre_id, 
           }));
 
           setImages(serverImages);
-          setBrochureId(response.data.brouchre_id);
+          setRefreshKey(prev => prev + 1);
         } else {
           setImages([]);
         }
@@ -88,6 +89,7 @@ const GymPlans = () => {
         setImages([]);
       }
     } catch (error) {
+      console.error("Error fetching gym brochures:", error);
       showToast({
         type: "error",
         title: "Error fetching gym brochures",
@@ -103,10 +105,90 @@ const GymPlans = () => {
     setFullImageModalVisible(true);
   };
 
-  const postTheGymBrochures = async (updatedImages) => {
+  const deleteBrochureImage = async (brochureId, imageIndex) => {
     try {
-      setLoading(true);
-      const formData = new FormData();
+      setDeleting(true);
+
+      const response = await deleteBrochure(brochureId);
+
+      if (response.status === 200) {
+        showToast({
+          type: "success",
+          title: "Image deleted successfully",
+        });
+
+        if (imageIndex <= currentSlideIndex && currentSlideIndex > 0) {
+          setCurrentSlideIndex(prev => prev - 1);
+        }
+
+        await fetchGymBrochures();
+      }
+    } catch (error) {
+      console.error("Error deleting brochure:", error);
+      showToast({
+        type: "error",
+        title: "Failed to delete image",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+
+  const handleDeleteFromModal = async (imageIndex) => {
+    const image = images[imageIndex];
+
+    if (image.serverPath || image.brochureId) {
+      try {
+        setDeleting(true);
+
+        const response = await deleteBrochure(image.brochureId);
+
+        if (response.status === 200) {
+          showToast({
+            type: "success",
+            title: "Image deleted successfully from server",
+          });
+
+          
+          if (imageIndex <= currentSlideIndex && currentSlideIndex > 0) {
+            setCurrentSlideIndex(prev => prev - 1);
+          }
+
+          await fetchGymBrochures();
+        } else {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+      } catch (error) {
+        console.error("Error deleting brochure:", error);
+        showToast({
+          type: "error",
+          title: "Failed to delete image from server",
+        });
+      } finally {
+        setDeleting(false);
+      }
+    } else {
+      const updatedImages = images.filter((_, index) => index !== imageIndex);
+      setImages(updatedImages);
+      if (imageIndex <= currentSlideIndex && currentSlideIndex > 0) {
+        setCurrentSlideIndex(prev => prev - 1);
+      }
+
+      setRefreshKey(prev => prev + 1);
+
+      showToast({
+        type: "success",
+        title: "Local image removed",
+      });
+    }
+  };
+
+  const uploadToS3 = async (updatedImages) => {
+    try {
+      setUploading(true);
+      setUploadStatus("Preparing upload...");
+
       const gym_id = await getToken("gym_id");
 
       if (!gym_id) {
@@ -114,60 +196,152 @@ const GymPlans = () => {
           type: "error",
           title: "Gym ID not found",
         });
-        return;
+        return false;
       }
-
-      formData.append("gym_id", gym_id);
-
-      if (brochureId) {
-        formData.append("brochure_id", brochureId);
-      }
-
-      const serverImages = updatedImages
-        .filter((img) => img.serverPath)
-        .map((img) => img.serverPath);
-
-      formData.append("media", JSON.stringify(serverImages));
 
       const newImages = updatedImages.filter(
         (img) => !img.serverPath && img.source.uri
       );
 
-      newImages.forEach((img, index) => {
-        const uri = img.source.uri;
-        const fileName = uri.split("/").pop();
-        const fileType = fileName.split(".").pop();
+      if (newImages.length === 0) {
+        const hasChanges = updatedImages.length !== images.length;
 
-        formData.append("file", {
-          uri,
-          name: fileName || `image_${index}.${fileType}`,
-          type: `image/${fileType}`,
-        });
-      });
-
-      const response = await PostGymPlansImages(formData);
-
-      if (response && response.status === 200) {
         showToast({
           type: "success",
-          title: response.message || "Images updated successfully",
+          title: hasChanges ? "Changes saved successfully" : "No new images to upload",
         });
-
-        if (response.brochure_id) {
-          setBrochureId(response.brochure_id);
-        }
-        await fetchGymBrochures();
-      } else {
-        throw new Error(response?.message || "Failed to update images");
+        return true;
       }
+
+      const mediaMetadata = newImages.map((item) => {
+        const uri = item.source.uri;
+        const fileName = uri.split("/").pop();
+        const fileType = fileName.split(".").pop().toLowerCase();
+
+        return {
+          type: "image",
+          fileName: fileName || `brochure_${Date.now()}.${fileType}`,
+          contentType: `image/${fileType}`,
+          extension: fileType
+        };
+      });
+
+      setUploadStatus("Getting upload URLs...");
+
+      const presignedResponse = await getBrochurePresignedUrls({
+        gym_id: parseInt(gym_id),
+        media: mediaMetadata,
+      });
+
+      if (presignedResponse?.status !== 200 || !presignedResponse.data?.presigned_urls) {
+        throw new Error("Failed to get upload URLs");
+      }
+
+      const { presigned_urls } = presignedResponse.data;
+
+      setUploadStatus("Uploading images...");
+
+      const uploadPromises = newImages.map(async (item, index) => {
+
+        const { upload_url, cdn_url, content_type, brochure_id: newBrochureId } = presigned_urls[index];
+
+        try {
+
+          const formData = new FormData();
+
+          Object.keys(upload_url.fields).forEach(key => {
+            formData.append(key, upload_url.fields[key]);
+          });
+
+          const uri = item.source.uri;
+          const fileName = uri.split("/").pop();
+          const fileType = content_type || `image/${fileName.split(".").pop().toLowerCase()}`;
+
+          formData.append('file', {
+            uri: uri,
+            name: fileName,
+            type: fileType,
+          });
+
+          const s3Response = await fetch(upload_url.url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              
+            },
+          });
+
+          if (s3Response.status === 204 || s3Response.status === 200) {
+            return {
+              success: true,
+              cdn_url: cdn_url,
+              brochure_id: newBrochureId
+            };
+          } else {
+            console.error("S3 upload failed with status:", s3Response.status);
+            const responseText = await s3Response.text();
+            console.error("S3 error response:", responseText);
+            return { success: false };
+          }
+        } catch (error) {
+          console.error("Upload error for image:", error);
+          return { success: false };
+        }
+      });
+
+      const uploadResults = await Promise.all(uploadPromises);
+      const failedUploads = uploadResults.filter(result => !result.success);
+
+      if (failedUploads.length > 0) {
+        throw new Error(`${failedUploads.length} images failed to upload`);
+      }
+
+      setUploadStatus("Finalizing...");
+
+      const newCdnUrls = uploadResults.map((result) => {
+        return {
+          cdn_url: result.cdn_url,
+          brochure_id: result.brochure_id
+        }
+      });
+
+      for (const cdnUrl of newCdnUrls) {
+        await confirmBrochureUpload({
+          cdn_url: cdnUrl.cdn_url,
+          gym_id: parseInt(gym_id),
+          brouchure_id: cdnUrl.brochure_id,
+        });
+      }
+
+      setUploadStatus("Upload complete!");
+
+      showToast({
+        type: "success",
+        title: "Images uploaded successfully",
+      });
+
+      await fetchGymBrochures();
+
+      return true;
+
     } catch (error) {
+      console.error("Upload error:", error);
+      setUploadStatus("Upload failed");
       showToast({
         type: "error",
-        title: error.message || "Failed to update images",
+        title: error.message || "Failed to upload images",
       });
+      return false;
     } finally {
-      setLoading(false);
+      setUploading(false);
+      setTimeout(() => {
+        setUploadStatus("");
+      }, 2000);
     }
+  };
+
+  const postTheGymBrochures = async (updatedImages) => {
+    return await uploadToS3(updatedImages);
   };
 
   const goToPrevSlide = () => {
@@ -184,14 +358,29 @@ const GymPlans = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* <OwnerHeader /> */}
       <HardwareBackHandler routePath="/owner/home" enabled={true} />
 
       <NewOwnerHeader
         onBackButtonPress={() => router.push("/owner/home")}
         text={"Brochures"}
       />
-      <Text style={styles.headerTitle}>Gym Image Gallery</Text>
+      {/* <Text style={styles.headerTitle}>Gym Image Gallery</Text>
+
+      Upload Status */}
+      {uploading && (
+        <View style={styles.uploadingContainer}>
+          <ActivityIndicator size="small" color="#007AFF" />
+          <Text style={styles.uploadingText}>{uploadStatus}</Text>
+        </View>
+      )}
+
+      {/* Delete Status */}
+      {deleting && (
+        <View style={styles.uploadingContainer}>
+          <ActivityIndicator size="small" color="#FF3B30" />
+          <Text style={[styles.uploadingText, { color: "#FF3B30" }]}>Deleting image...</Text>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -202,6 +391,7 @@ const GymPlans = () => {
         <>
           <View style={styles.mediaWrapper}>
             <Swiper
+              key={refreshKey} 
               ref={swiperRef}
               style={styles.swiperContainer}
               showsPagination={false}
@@ -218,7 +408,7 @@ const GymPlans = () => {
               index={currentSlideIndex}
             >
               {images.map((image, index) => (
-                <View key={`slide-${image.id}`} style={styles.slideItem}>
+                <View key={`slide-${image.id}-${refreshKey}`} style={styles.slideItem}>
                   <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={() => openFullImage(image.source)}
@@ -235,7 +425,6 @@ const GymPlans = () => {
               ))}
             </Swiper>
 
-            {/* Navigation Arrows */}
             {images.length > 1 && (
               <>
                 <TouchableOpacity
@@ -250,7 +439,7 @@ const GymPlans = () => {
                   <AntDesign
                     name="left"
                     size={24}
-                    color={currentSlideIndex === 0 ? "#ccc" : "#007AFF"}
+                    color={currentSlideIndex === 0 ? "#fcfcfc" : "#fff"}
                   />
                 </TouchableOpacity>
 
@@ -271,7 +460,7 @@ const GymPlans = () => {
                     color={
                       currentSlideIndex === images.length - 1
                         ? "#ccc"
-                        : "#007AFF"
+                        : "#fff"
                     }
                   />
                 </TouchableOpacity>
@@ -282,7 +471,7 @@ const GymPlans = () => {
           <View style={styles.indicatorContainer}>
             {images.map((_, index) => (
               <TouchableOpacity
-                key={`indicator-${index}`}
+                key={`indicator-${index}-${refreshKey}`}
                 style={[
                   styles.customIndicator,
                   currentSlideIndex === index && styles.activeCustomIndicator,
@@ -307,10 +496,15 @@ const GymPlans = () => {
       )}
 
       <TouchableOpacity
-        style={styles.addButton}
+        style={[styles.addButton, (uploading || deleting) && styles.disabledButton]}
         onPress={() => setModalVisible(true)}
+        disabled={uploading || deleting}
       >
-        <AntDesign name="plus" size={24} color="#FFF" />
+        {uploading ? (
+          <ActivityIndicator size={20} color="#FFF" />
+        ) : (
+          <AntDesign name="plus" size={24} color="#FFF" />
+        )}
       </TouchableOpacity>
 
       <ImageUploadModal
@@ -319,6 +513,8 @@ const GymPlans = () => {
         images={images}
         setImages={setImages}
         postTheGymBrochures={postTheGymBrochures}
+        uploading={uploading}
+        onDeleteImage={handleDeleteFromModal} 
       />
       <FullImageModal
         isVisible={isFullImageModalVisible}
@@ -341,12 +537,31 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 15,
   },
+  uploadingContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 10,
+    backgroundColor: "#E3F2FD",
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 8,
+  },
+  uploadingText: {
+    marginLeft: 10,
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
   mediaWrapper: {
+    flex: 0.8,
     width: responsiveWidth(100),
     height: responsiveWidth(100),
     marginTop: 10,
     backgroundColor: "#F7F7F7",
     position: "relative",
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   swiperContainer: {
     height: responsiveWidth(100),
@@ -357,6 +572,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F7F7F7",
+    position: "relative",
   },
   mediaImageContainer: {
     width: responsiveWidth(90),
@@ -367,6 +583,23 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     borderRadius: 10,
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 10,
+    right: 30,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+    zIndex: 5,
   },
   indicatorContainer: {
     flexDirection: "row",
@@ -395,7 +628,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -432,6 +665,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     zIndex: 999,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   loadingContainer: {
     flex: 1,

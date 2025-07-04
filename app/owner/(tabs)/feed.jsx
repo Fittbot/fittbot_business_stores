@@ -18,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import FitnessLoader from "../../../components/ui/FitnessLoader";
 // import useBackHandler from '../../../components/UseBackHandler ';
+import useEdgeSwipe from "../../../hooks/useEdgeSwipe";
 import { Image, ImageBackground } from "expo-image";
 import Svg, { Circle } from "react-native-svg";
 import AllFeed from "../../../components/ui/Feed/allfeeds";
@@ -85,6 +86,27 @@ const Feed = () => {
     setGymName(current_name);
     setLoading(false);
   };
+
+  const {
+    panHandlers,
+    SwipeIndicator,
+    isSwipeActive,
+    isEnabled: swipeEnabled,
+    swipeAnimatedValue,
+    resetSwipe,
+    debug,
+    temporarilyDisableSwipe,
+  } = useEdgeSwipe({
+    onSwipeComplete: toggleSideNav,
+    isEnabled: true,
+    isBlocked: isSideNavVisible,
+    config: {
+      edgeSwipeThreshold: 30,
+      swipeMinDistance: 50,
+      swipeMinVelocity: 0.3,
+      preventIOSBackSwipe: true,
+    },
+  });
 
   useEffect(() => {
     getGymName();
@@ -244,7 +266,7 @@ const Feed = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panHandlers}>
       {loading ? (
         <FitnessLoader page="feed" />
       ) : (
@@ -295,6 +317,8 @@ const Feed = () => {
           )}
 
           {renderContent()}
+
+          <SwipeIndicator />
         </>
       )}
     </View>

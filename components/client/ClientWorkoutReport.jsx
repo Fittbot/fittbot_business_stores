@@ -18,6 +18,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  TouchableWithoutFeedback,
 } from "react-native";
 // import FitnessLoader from '../../../components/ui/FitnessLoader';
 import { clientReportAPI, getClientWorkoutAPI } from "../../services/clientApi";
@@ -112,6 +113,8 @@ const WeekdayButton = ({ day, date, isActive, onPress, fullDate }) => {
 const ClientWorkoutReport = (props) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Add temporary date state for iOS picker
+  const [tempDate, setTempDate] = useState(new Date());
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -322,15 +325,33 @@ const ClientWorkoutReport = (props) => {
     }
   };
 
+  // Updated date change handler for iOS/Android compatibility
   const showDate = async (event, selected) => {
-    if (selected) {
-      if (selected > today) return;
-
-      setShowDatePicker(Platform.OS === "ios");
-      setSelectedDate(selected);
-    } else {
+    if (Platform.OS === "android") {
       setShowDatePicker(false);
+      if (selected) {
+        if (selected > today) return;
+        setSelectedDate(selected);
+      }
+    } else {
+      // iOS - just update temp date
+      if (selected) {
+        setTempDate(selected);
+      }
     }
+  };
+
+  // iOS picker confirmation handlers
+  const confirmDateSelection = () => {
+    if (tempDate > today) return;
+    setSelectedDate(tempDate);
+    setShowDatePicker(false);
+  };
+
+  // Cancel handler for iOS
+  const cancelDateSelection = () => {
+    setTempDate(selectedDate);
+    setShowDatePicker(false);
   };
 
   const openPhotoModal = (photo) => {
@@ -488,7 +509,12 @@ const ClientWorkoutReport = (props) => {
               <TouchableOpacity onPress={() => navigateDate(-1)}>
                 <Ionicons name="chevron-back" size={24} color="#000" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setTempDate(selectedDate);
+                  setShowDatePicker(true);
+                }}
+              >
                 <Text style={styles.dateHeaderText}>
                   {formatHeaderDate(selectedDate)}
                 </Text>
@@ -743,7 +769,46 @@ const ClientWorkoutReport = (props) => {
           </View>
         </ScrollView>
 
-        {showDatePicker && (
+        {/* iOS Date Picker Modal */}
+        {Platform.OS === "ios" && showDatePicker && (
+          <Modal
+            transparent={true}
+            animationType="slide"
+            visible={showDatePicker}
+            onRequestClose={cancelDateSelection}
+          >
+            <TouchableWithoutFeedback onPress={cancelDateSelection}>
+              <View style={styles.pickerModalContainer}>
+                <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                  <View style={styles.pickerContainer}>
+                    <View style={styles.pickerHeader}>
+                      <TouchableOpacity onPress={cancelDateSelection}>
+                        <Text style={styles.pickerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.pickerTitle}>Select Date</Text>
+                      <TouchableOpacity onPress={confirmDateSelection}>
+                        <Text style={styles.pickerConfirmText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={tempDate}
+                      mode="date"
+                      display="spinner"
+                      themeVariant="light"
+                      textColor="#000000"
+                      onChange={showDate}
+                      maximumDate={today}
+                      style={styles.iosPickerStyle}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+        )}
+
+        {/* Android Date Picker */}
+        {Platform.OS === "android" && showDatePicker && (
           <DateTimePicker
             value={selectedDate}
             mode="date"
@@ -1203,6 +1268,44 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: "white",
     fontWeight: "500",
+  },
+  // iOS Picker Modal Styles (added from previous examples)
+  pickerModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  pickerConfirmText: {
+    fontSize: 16,
+    color: "#007BFF",
+    fontWeight: "600",
+  },
+  iosPickerStyle: {
+    height: 200,
+    width: "100%",
   },
 });
 

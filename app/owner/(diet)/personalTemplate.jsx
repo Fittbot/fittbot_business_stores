@@ -537,6 +537,7 @@ export default personalTemplate;
 const styles = StyleSheet.create({
   sectionContainer: {
     flex: 1,
+    backgroundColor: "#F7F7F7",
     // padding: width * 0.04,
   },
   backButtonContainer: {

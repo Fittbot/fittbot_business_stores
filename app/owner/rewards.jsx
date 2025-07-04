@@ -1,4 +1,3 @@
-// RewardsScreen.js - Fixed version for iOS modal issue
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -13,14 +12,19 @@ import {
   Pressable,
   Modal,
   Platform,
+  ScrollView,
+  TextInput,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from 'expo-image-picker';
 import {
   getRewardsAPI,
   createRewardAPI,
   updateRewardAPI,
   deleteRewardAPI,
+  confirmRewardImageAPI, 
 } from "../../services/Api";
 import FitnessLoader from "../../components/ui/FitnessLoader";
 import { getToken } from "../../utils/auth";
@@ -29,13 +33,367 @@ import { router } from "expo-router";
 import { showToast } from "../../utils/Toaster";
 
 import RewardCard from "../../components/reward/RewardCard";
-import AddEditRewardModal from "../../components/reward/AddEditRewardModal";
 import RewardDetailsModal from "../../components/reward/RewardDetailsModal";
 import DuplicateXPConfirmationModal from "../../components/reward/DuplicateXPConfirmationModal";
 import { ShimmerNewsArticle } from "../../components/shimmerUI/ShimmerComponentsPreview";
 import HardwareBackHandler from "../../components/HardwareBackHandler";
 
 const { width, height } = Dimensions.get("window");
+
+const DEFAULT_REWARD_IMAGES = [
+  { 
+    id: 'default_rewards',
+    source: require("../../assets/images/rewards/rewards_img.png"),
+    isDefault: true 
+  },
+  { 
+    id: 'default_subscription',
+    source: require("../../assets/images/rewards/subscription.png"),
+    isDefault: true 
+  },
+  { 
+    id: 'default_bag',
+    source: require("../../assets/images/rewards/bag.png"),
+    isDefault: true 
+  },
+  { 
+    id: 'default_bottle',
+    source: require("../../assets/images/rewards/bottle.png"),
+    isDefault: true 
+  },
+  { 
+    id: 'default_tshirt',
+    source: require("../../assets/images/rewards/t-shirt.png"),
+    isDefault: true 
+  },
+];
+
+const getImageSourceById = (imageId) => {
+  const image = DEFAULT_REWARD_IMAGES.find(img => img.id === imageId);
+  return image ? image.source : require("../../assets/images/rewards/rewards_img.png");
+};
+
+const uploadImageToS3 = async (presignedData, imageUri) => {
+  try {
+    
+    const formData = new FormData();
+  
+    Object.keys(presignedData.fields).forEach(key => {
+      formData.append(key, presignedData.fields[key]);
+    });
+
+    formData.append('file', {
+      uri: imageUri,
+      type: presignedData.fields['Content-Type'],
+      name: `reward_image.${getFileExtension(imageUri)}`,
+    });
+
+    const response = await fetch(presignedData.url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('S3 upload failed:', response.status, errorText);
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('S3 upload error:', error);
+    throw error;
+  }
+};
+
+const getFileExtension = (uri) => {
+  const extension = uri.split('.').pop();
+  return extension || 'jpg';
+};
+
+const getContentType = (extension) => {
+  const contentTypes = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+  };
+  return contentTypes[extension.toLowerCase()] || 'image/jpeg';
+};
+
+const ImagePickerModal = ({ visible, onClose, onSelectImage, selectedImage }) => {
+  const [currentSelection, setCurrentSelection] = useState(selectedImage);
+
+  const handleSelectDefault = (imageData) => {
+    setCurrentSelection(imageData);
+  };
+
+  const handlePickFromGallery = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert("Permission Required", "Please allow access to your photo library.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setCurrentSelection({ 
+          id: 'custom_' + Date.now(),
+          source: { uri: result.assets[0].uri },
+          isDefault: false,
+          uri: result.assets[0].uri
+        });
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      showToast({ type: "error", title: "Error selecting image" });
+    }
+  };
+
+  const handleConfirm = () => {
+    onSelectImage(currentSelection);
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.imagePickerOverlay}>
+        <View style={styles.imagePickerContainer}>
+          <View style={styles.imagePickerHeader}>
+            <Text style={styles.imagePickerTitle}>Select Reward Image</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.imagePickerContent}>
+            <TouchableOpacity 
+              style={styles.uploadButton}
+              onPress={handlePickFromGallery}
+            >
+              <Ionicons name="camera" size={24} color="#007AFF" />
+              <Text style={styles.uploadButtonText}>Upload Custom Image</Text>
+            </TouchableOpacity>
+
+            {currentSelection && !currentSelection.isDefault && (
+              <View style={styles.customImagePreview}>
+                <Text style={styles.sectionTitle}>Selected Custom Image</Text>
+                <Image source={currentSelection.source} style={styles.customImage} />
+              </View>
+            )}
+            <Text style={styles.sectionTitle}>Default Images</Text>
+            <View style={styles.defaultImagesContainer}>
+              {DEFAULT_REWARD_IMAGES.map((imageData, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.imageOption,
+                    currentSelection?.id === imageData.id && styles.selectedImageOption
+                  ]}
+                  onPress={() => handleSelectDefault(imageData)}
+                >
+                  <Image source={imageData.source} style={styles.defaultImage} />
+                  {currentSelection?.id === imageData.id && (
+                    <View style={styles.selectedOverlay}>
+                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            
+          </ScrollView>
+
+          <View style={styles.imagePickerFooter}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.confirmButton, !currentSelection && styles.disabledButton]} 
+              onPress={handleConfirm}
+              disabled={!currentSelection}
+            >
+              <Text style={styles.confirmButtonText}>Confirm</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const FullPageRewardModal = ({ 
+  visible, 
+  onClose, 
+  rewardsInput, 
+  setRewardsInput, 
+  onSubmit, 
+  isEditing, 
+  isLoading 
+}) => {
+  const [imagePickerVisible, setImagePickerVisible] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const addNewReward = () => {
+    setRewardsInput([...rewardsInput, { xp: "", gift: "", image: DEFAULT_REWARD_IMAGES[0] }]);
+  };
+
+  const removeReward = (index) => {
+    if (rewardsInput.length > 1) {
+      const newRewards = rewardsInput.filter((_, i) => i !== index);
+      setRewardsInput(newRewards);
+    }
+  };
+
+  const updateReward = (index, field, value) => {
+    const newRewards = [...rewardsInput];
+    newRewards[index] = { ...newRewards[index], [field]: value };
+    setRewardsInput(newRewards);
+  };
+
+  const handleImageSelect = (index) => {
+    setActiveImageIndex(index);
+    setImagePickerVisible(true);
+  };
+
+  const handleImageSelected = (image) => {
+    updateReward(activeImageIndex, 'image', image);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={styles.fullPageModal}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose} style={styles.modalBackButton}>
+            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>
+            {isEditing ? "Edit Reward" : "Create Rewards"}
+          </Text>
+          <TouchableOpacity 
+            onPress={onSubmit}
+            style={[styles.saveButton, isLoading && styles.disabledButton]}
+            disabled={isLoading}
+          >
+            <Text style={styles.saveButtonText}>
+              {isLoading ? "Saving..." : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          {rewardsInput.map((reward, index) => (
+            <View key={index} style={styles.rewardInputContainer}>
+              <View style={styles.rewardHeader}>
+                <Text style={styles.rewardNumber}>Reward {index + 1}</Text>
+                {!isEditing && rewardsInput.length > 1 && (
+                  <TouchableOpacity 
+                    onPress={() => removeReward(index)}
+                    style={styles.removeButton}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <TouchableOpacity 
+                style={styles.imageSelector}
+                onPress={() => handleImageSelect(index)}
+              >
+                <View style={styles.imageContainer}>
+                  {reward.image ? (
+                    <Image 
+                      source={reward.image.source || reward.image} 
+                      style={styles.selectedRewardImage} 
+                    />
+                  ) : (
+                    <View style={styles.placeholderImage}>
+                      <Ionicons name="image-outline" size={40} color="#999" />
+                    </View>
+                  )}
+                  <View style={styles.imageOverlay}>
+                    <Ionicons name="camera" size={20} color="#FFF" />
+                  </View>
+                </View>
+                <Text style={styles.imageSelectorText}>Tap to select image</Text>
+              </TouchableOpacity>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>XP Required</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={reward.xp}
+                  onChangeText={(text) => updateReward(index, 'xp', text)}
+                  placeholder="Enter XP amount"
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Reward Description</Text>
+                <TextInput
+                  style={[styles.textInput, styles.multilineInput]}
+                  value={reward.gift}
+                  onChangeText={(text) => updateReward(index, 'gift', text)}
+                  placeholder="Enter reward description (max 300)"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  placeholderTextColor="#999"
+                  maxLength={300}
+                />
+              </View>
+            </View>
+          ))}
+
+          {!isEditing && (
+            <TouchableOpacity 
+              style={styles.addAnotherButton}
+              onPress={addNewReward}
+            >
+              <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+              <Text style={styles.addAnotherText}>Add Another Reward</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+
+        <ImagePickerModal
+          visible={imagePickerVisible}
+          onClose={() => setImagePickerVisible(false)}
+          onSelectImage={handleImageSelected}
+          selectedImage={rewardsInput[activeImageIndex]?.image}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+};
 
 const RewardsScreen = () => {
   const [rewards, setRewards] = useState([]);
@@ -45,7 +403,7 @@ const RewardsScreen = () => {
   const [isDuplicateModalVisible, setIsDuplicateModalVisible] = useState(false);
   const [selectedReward, setSelectedReward] = useState(null);
   const [multipleRewardsInput, setMultipleRewardsInput] = useState([
-    { xp: "", gift: "" },
+    { xp: "", gift: "", image: DEFAULT_REWARD_IMAGES[0] },
   ]);
   const [editIndex, setEditIndex] = useState(null);
 
@@ -93,7 +451,28 @@ const RewardsScreen = () => {
   const handleEditReward = useCallback((item, index) => {
     setEditIndex(index);
     setSelectedReward(item);
-    setMultipleRewardsInput([{ xp: item.xp.toString(), gift: item.gift }]);
+    
+    let imageData = DEFAULT_REWARD_IMAGES[0]; 
+    if (item.image_url && (item.image_url.startsWith('http') || item.image_url.startsWith('https'))) {
+      imageData = {
+        id: 'custom_edit',
+        source: { uri: item.image_url },
+        isDefault: false,
+        uri: item.image_url
+      };
+    } 
+    else if (item.image_url && item.image_url.startsWith('default_')) {
+      const defaultImage = DEFAULT_REWARD_IMAGES.find(img => img.id === item.image_url);
+      if (defaultImage) {
+        imageData = defaultImage;
+      }
+    }
+    
+    setMultipleRewardsInput([{ 
+      xp: item.xp.toString(), 
+      gift: item.gift, 
+      image: imageData
+    }]);
     setIsAddEditModalVisible(true);
     setOpenDropdownId(null);
   }, []);
@@ -115,7 +494,7 @@ const RewardsScreen = () => {
                 setIsLoading(false);
                 return;
               }
-              const response = await deleteRewardAPI(item.id);
+              const response = await deleteRewardAPI(item.id, gymId);
               if (response?.status === 200 || response?.status === 204) {
                 setRewards((prevRewards) =>
                   prevRewards.filter((reward) => reward.id !== item.id)
@@ -146,7 +525,7 @@ const RewardsScreen = () => {
 
   const handleOpenAddModal = useCallback(() => {
     setEditIndex(null);
-    setMultipleRewardsInput([{ xp: "", gift: "" }]);
+    setMultipleRewardsInput([{ xp: "", gift: "", image: DEFAULT_REWARD_IMAGES[0] }]);
     setIsAddEditModalVisible(true);
     setOpenDropdownId(null);
   }, []);
@@ -154,7 +533,7 @@ const RewardsScreen = () => {
   const handleCloseAddEditModal = useCallback(() => {
     setIsAddEditModalVisible(false);
     setEditIndex(null);
-    setMultipleRewardsInput([{ xp: "", gift: "" }]);
+    setMultipleRewardsInput([{ xp: "", gift: "", image: DEFAULT_REWARD_IMAGES[0] }]);
   }, []);
 
   const handleCloseDetailModal = useCallback(() => {
@@ -162,240 +541,396 @@ const RewardsScreen = () => {
     setSelectedReward(null);
   }, []);
 
-  // Updated handleUpdateReward function
-  const handleUpdateReward = useCallback(
-    async (updatedRewardPayload, showSuccessToast = true) => {
-      try {
-        const gymId = await getToken("gym_id");
-        if (!gymId) {
-          showToast({ type: "error", title: "GymId is not available" });
-          return false;
-        }
+  const hasImageChanged = (currentImage, originalReward) => {
+    if (originalReward.image_url) {
+      if (currentImage.isDefault) {
+        return originalReward.image_url !== currentImage.id;
+      } else {
+        return currentImage.uri !== originalReward.image_url;
+      }
+    }
+    return currentImage.id !== 'default_rewards';
+  };
 
-        const payload = {
-          gym_id: gymId,
-          record_id: updatedRewardPayload.id,
-          updated_reward: {
-            xp: updatedRewardPayload.xp,
-            gift: updatedRewardPayload.gift,
-          },
-        };
-
-        const response = await updateRewardAPI(payload);
-
-        if (response?.status === 200) {
-          setRewards((prev) =>
-            prev.map((r) =>
-              r?.id === updatedRewardPayload?.id ? response.data : r
-            )
-          );
-          if (showSuccessToast) {
-            showToast({
-              type: "success",
-              title: "Reward updated successfully",
-            });
-          }
-          return true;
-        } else {
-          showToast({
-            type: "error",
-            title: response?.detail || "Failed to update reward",
-          });
-          return false;
-        }
-      } catch (error) {
-        showToast({ type: "error", title: "Failed to update reward" });
-        console.error("Update reward error:", error);
+  const handleUpdateReward = useCallback(async (updatedRewardData) => {
+    try {
+      const gymId = await getToken("gym_id");
+      if (!gymId) {
+        showToast({ type: "error", title: "GymId is not available" });
         return false;
       }
-    },
-    []
-  );
 
-  const handleSubmitRewards = useCallback(async () => {
-    setIsLoading(true);
-    const gymId = await getToken("gym_id");
-    if (!gymId) {
-      showToast({ type: "error", title: "Missing gym information" });
-      setIsLoading(false);
-      return;
-    }
+      const originalReward = selectedReward;
+      const imageChanged = hasImageChanged(updatedRewardData.image, originalReward);
 
-    const validRewardEntries = multipleRewardsInput.filter(
-      (reward) => String(reward.xp).trim() !== "" && reward.gift.trim() !== ""
-    );
 
-    if (validRewardEntries.length === 0) {
-      showToast({
-        type: "error",
-        title: "Please fill in at least one reward completely",
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    const newRewardsToAdd = [];
-    const duplicatesFoundForModal = [];
-
-    if (editIndex !== null && selectedReward) {
-      const rewardToUpdate = {
-        ...validRewardEntries[0],
-        id: selectedReward.id,
+      const basePayload = {
+        gym_id: gymId,
+        record_id: originalReward.id,
+        updated_reward: {
+          xp: parseInt(updatedRewardData.xp),
+          gift: updatedRewardData.gift,
+        },
       };
 
-      const existingConflictingReward = rewards.find(
-        (r) =>
-          String(r.xp).trim() === String(rewardToUpdate.xp).trim() &&
-          r.id !== rewardToUpdate.id
-      );
-
-      if (existingConflictingReward) {
-        Alert.alert(
-          "XP Already Exists",
-          `A reward with ${rewardToUpdate.xp} XP already exists ("${existingConflictingReward.gift}"). Do you want to replace it with "${rewardToUpdate.gift}" and delete the original reward ("${selectedReward.gift}")?`,
-          [
-            {
-              text: "Cancel",
-              style: "cancel",
-              onPress: () => setIsLoading(false),
-            },
-            {
-              text: "Replace & Delete Original",
-              onPress: async () => {
-                setIsLoading(true);
-                try {
-                  const updateConflictingSuccess = await handleUpdateReward(
-                    {
-                      id: existingConflictingReward.id,
-                      xp: existingConflictingReward.xp,
-                      gift: rewardToUpdate.gift,
-                    },
-                    false
-                  );
-
-                  if (updateConflictingSuccess) {
-                    const deleteOriginalSuccess = await deleteRewardAPI(
-                      selectedReward.id
-                    );
-
-                    if (
-                      deleteOriginalSuccess?.status === 200 ||
-                      deleteOriginalSuccess?.status === 204
-                    ) {
-                      showToast({
-                        type: "success",
-                        title: `Reward updated and original deleted successfully!`,
-                      });
-                    } else {
-                      showToast({
-                        type: "error",
-                        title:
-                          deleteOriginalSuccess?.detail ||
-                          "Failed to delete original reward after update.",
-                      });
-                    }
-                  } else {
-                    showToast({
-                      type: "error",
-                      title:
-                        "Failed to update existing reward with new gift. Original not deleted.",
-                    });
-                  }
-                } catch (error) {
-                  showToast({
-                    type: "error",
-                    title: "Error processing XP conflict.",
-                  });
-                  console.error("XP conflict error:", error);
-                } finally {
-                  handleCloseAddEditModal();
-                  await fetchRewards();
-                  setIsLoading(false);
-                }
-              },
-              style: "destructive",
-            },
-          ]
-        );
-        setIsLoading(false);
-        return;
-      } else {
-        const success = await handleUpdateReward(rewardToUpdate, true);
-        if (success) {
-          handleCloseAddEditModal();
-          await fetchRewards();
+      if (imageChanged) {
+        if (!updatedRewardData.image.isDefault) {
+          const extension = getFileExtension(updatedRewardData.image.uri);
+          const contentType = getContentType(extension);
+          
+          basePayload.updated_reward.extension = extension;
+          basePayload.updated_reward.content_type = contentType;
+        } else {
+          if (updatedRewardData.image.id === 'default_rewards') {
+            basePayload.updated_reward.image_url = null;
+          } else {
+            basePayload.updated_reward.image_url = updatedRewardData.image.id;
+          }
+          basePayload.updated_reward.extension = 'jpg';
+          basePayload.updated_reward.content_type = 'image/jpeg';
         }
-        setIsLoading(false);
-        return;
+      }
+
+
+      const response = await updateRewardAPI(basePayload);
+      
+      if (response?.status === 200) {
+        if (imageChanged && !updatedRewardData.image.isDefault && response.data?.presigned) {
+          try {
+            await uploadImageToS3(response.data.presigned, updatedRewardData.image.uri);
+            
+            const confirmPayload = {
+              reward_id: response.data.reward_id,
+              cdn_url: response.data.cdn_url,
+            };
+            
+            const confirmResponse = await confirmRewardImageAPI(confirmPayload);
+            
+            if (confirmResponse?.status === 200) {
+              setRewards((prev) =>
+                prev.map((r) =>
+                  r?.id === originalReward?.id 
+                    ? { 
+                        ...r, 
+                        xp: parseInt(updatedRewardData.xp), 
+                        gift: updatedRewardData.gift,
+                        image_url: confirmResponse.data
+                      }
+                    : r
+                )
+              );
+              showToast({
+                type: "success",
+                title: "Reward updated successfully with new image",
+              });
+              return true;
+            } else {
+              showToast({
+                type: "error",
+                title: "Failed to confirm image upload",
+              });
+              return false;
+            }
+          } catch (uploadError) {
+            console.error("Image upload error:", uploadError);
+            showToast({
+              type: "error",
+              title: "Failed to upload image",
+            });
+            return false;
+          }
+        } else {
+          let finalImageUrl = originalReward.image_url;
+          
+          if (imageChanged) {
+            if (updatedRewardData.image.isDefault) {
+              finalImageUrl = updatedRewardData.image.id === 'default_rewards' ? null : updatedRewardData.image.id;
+            }
+          }
+            
+          setRewards((prev) =>
+            prev.map((r) =>
+              r?.id === originalReward?.id 
+                ? { 
+                    ...r, 
+                    xp: parseInt(updatedRewardData.xp), 
+                    gift: updatedRewardData.gift,
+                    image_url: finalImageUrl
+                  }
+                : r
+            )
+          );
+          showToast({
+            type: "success",
+            title: "Reward updated successfully",
+          });
+          return true;
+        }
+      } else {
+        showToast({
+          type: "error",
+          title: response?.detail || "Failed to update reward",
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error("Update reward error:", error);
+      showToast({ type: "error", title: "Failed to update reward" });
+      return false;
+    }
+  }, [selectedReward]);
+
+  // Create new reward function
+  const createNewReward = async (rewardData) => {
+    try {
+      const gymId = await getToken("gym_id");
+      
+      let createPayload = {
+        gym_id: parseInt(gymId),
+        xp: parseInt(rewardData.xp),
+        gift: rewardData.gift,
+      };
+      
+      if (rewardData.image.isDefault) {
+        if (rewardData.image.id === 'default_rewards') {
+          createPayload.image_url = null;
+          createPayload.extension = 'jpg';
+          createPayload.content_type = 'image/jpeg';
+        } else {
+          createPayload.image_url = rewardData.image.id;
+          createPayload.extension = 'jpg';
+          createPayload.content_type = 'image/jpeg';
+        }
+      } else {
+        const extension = getFileExtension(rewardData.image.uri);
+        const contentType = getContentType(extension);
+        
+        createPayload.extension = extension;
+        createPayload.content_type = contentType;
+      }
+
+      const response = await createRewardAPI(createPayload);
+      
+      if (response?.status === 200) {
+        let finalImageUrl = createPayload.image_url || null;
+        
+        if (!rewardData.image.isDefault) {
+          await uploadImageToS3(response.data.presigned, rewardData.image.uri);
+          finalImageUrl = response.data.cdn_url;
+        }
+        
+        const confirmPayload = {
+          reward_id: response.data.reward_id,
+          cdn_url: finalImageUrl || '',
+        };
+        
+        const confirmResponse = await confirmRewardImageAPI(confirmPayload);
+        
+        if (confirmResponse?.status === 200) {
+          const newReward = {
+            id: response.data.reward_id,
+            gym_id: parseInt(gymId),
+            xp: parseInt(rewardData.xp),
+            gift: rewardData.gift,
+            image_url: confirmResponse.data
+          };
+          
+          setRewards((prev) => [...prev, newReward]);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Create reward error:", error);
+      return false;
+    }
+  };
+
+  const handleSubmitRewards = useCallback(async () => {
+  setIsLoading(true);
+  const gymId = await getToken("gym_id");
+  if (!gymId) {
+    showToast({ type: "error", title: "Missing gym information" });
+    setIsLoading(false);
+    return;
+  }
+
+  const validRewardEntries = multipleRewardsInput.filter(
+    (reward) => String(reward.xp).trim() !== "" && reward.gift.trim() !== ""
+  );
+
+  if (validRewardEntries.length === 0) {
+    showToast({
+      type: "error",
+      title: "Please fill in at least one reward completely",
+    });
+    setIsLoading(false);
+    return;
+  }
+
+  const internalDuplicates = [];
+  const xpValues = [];
+  
+  validRewardEntries.forEach((reward, index) => {
+    const xpValue = String(reward.xp).trim();
+    const existingIndex = xpValues.findIndex(xp => xp === xpValue);
+    
+    if (existingIndex !== -1) {
+      const duplicateInfo = {
+        xp: xpValue,
+        rewards: [
+          { index: existingIndex, reward: validRewardEntries[existingIndex] },
+          { index: index, reward: reward }
+        ]
+      };
+      
+      const existingDuplicate = internalDuplicates.find(dup => dup.xp === xpValue);
+      if (existingDuplicate) {
+        existingDuplicate.rewards.push({ index: index, reward: reward });
+      } else {
+        internalDuplicates.push(duplicateInfo);
       }
     } else {
-      for (const newReward of validRewardEntries) {
-        const existingDuplicateInDB = rewards.find(
-          (r) => String(r.xp).trim() === String(newReward.xp).trim()
-        );
+      xpValues.push(xpValue);
+    }
+  });
 
-        if (existingDuplicateInDB) {
-          duplicatesFoundForModal.push({
-            newReward: newReward,
-            existingReward: existingDuplicateInDB,
-            type: "existingDuplicateInDB",
-          });
-        } else {
-          newRewardsToAdd.push(newReward);
-        }
+  if (internalDuplicates.length > 0) {
+    const duplicateXPList = internalDuplicates.map(dup => dup.xp).join(', ');
+    const duplicateDetails = internalDuplicates.map(dup => 
+      `${dup.xp} XP (${dup.rewards.length} rewards)`
+    ).join(', ');
+    
+    Alert.alert(
+      "Duplicate XP Values Found",
+      `You have multiple rewards with the same XP values: ${duplicateDetails}.\n\nPlease ensure each reward has a unique XP value before saving.`,
+      [
+        {
+          text: "OK",
+          style: "default",
+          onPress: () => setIsLoading(false),
+        },
+      ]
+    );
+    return;
+  }
+
+  if (editIndex !== null && selectedReward) {
+    const rewardToUpdate = {
+      ...validRewardEntries[0],
+      id: selectedReward.id,
+    };
+
+    const existingConflictingReward = rewards.find(
+      (r) =>
+        String(r.xp).trim() === String(rewardToUpdate.xp).trim() &&
+        r.id !== rewardToUpdate.id
+    );
+
+    if (existingConflictingReward) {
+      Alert.alert(
+        "XP Already Exists",
+        `A reward with ${rewardToUpdate.xp} XP already exists ("${existingConflictingReward.gift}"). Do you want to replace it with "${rewardToUpdate.gift}"?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => setIsLoading(false),
+          },
+          {
+            text: "Replace",
+            onPress: async () => {
+              try {
+                await deleteRewardAPI(existingConflictingReward.id, gymId);
+                
+                const success = await handleUpdateReward(rewardToUpdate);
+                
+                if (success) {
+                  showToast({
+                    type: "success",
+                    title: "Reward updated and duplicate removed",
+                  });
+                  handleCloseAddEditModal();
+                  await fetchRewards();
+                }
+              } catch (error) {
+                console.error("Replace conflict error:", error);
+                showToast({
+                  type: "error",
+                  title: "Failed to resolve XP conflict",
+                });
+              } finally {
+                setIsLoading(false);
+              }
+            },
+            style: "destructive",
+          },
+        ]
+      );
+      return;
+    } else {
+      const success = await handleUpdateReward(rewardToUpdate);
+      if (success) {
+        handleCloseAddEditModal();
+      }
+      setIsLoading(false);
+      return;
+    }
+  } else {
+    const duplicatesFound = [];
+    const rewardsToCreate = [];
+    
+    for (const newReward of validRewardEntries) {
+      const existingDuplicate = rewards.find(
+        (r) => String(r.xp).trim() === String(newReward.xp).trim()
+      );
+
+      if (existingDuplicate) {
+        duplicatesFound.push({
+          newReward: newReward,
+          existingReward: existingDuplicate,
+          type: "existingDuplicateInDB",
+        });
+      } else {
+        rewardsToCreate.push(newReward);
       }
     }
 
-    // Create new rewards that don't have duplicates
-    for (const reward of newRewardsToAdd) {
-      try {
-        const payload = { gym_id: gymId, reward: reward };
-        const response = await createRewardAPI(payload);
-        if (response?.status === 201 || response?.status === 200) {
-          setRewards((prev) => [...prev, response.data]);
-        } else {
-          showToast({
-            type: "error",
-            title: `Failed to create reward ${reward.gift}: ${
-              response?.detail || "Unknown error"
-            }`,
-          });
-        }
-      } catch (error) {
-        showToast({
-          type: "error",
-          title: `Failed to create reward ${reward.gift}`,
-        });
-        console.error("Create reward API error:", error);
+    let successCount = 0;
+    for (const reward of rewardsToCreate) {
+      const success = await createNewReward(reward);
+      if (success) {
+        successCount++;
       }
     }
 
     setIsLoading(false);
-
-    // Handle duplicates - CRITICAL FIX: Close AddEdit modal FIRST, then show duplicate modal
-    if (duplicatesFoundForModal.length > 0) {
-      setDuplicateInfo(duplicatesFoundForModal);
-      // Close the AddEdit modal first
+    if (duplicatesFound.length > 0) {
+      setDuplicateInfo(duplicatesFound);
       setIsAddEditModalVisible(false);
-      // Then show the duplicate modal with a delay to ensure proper modal transition
       setTimeout(() => {
         setIsDuplicateModalVisible(true);
       }, 300);
     } else {
       handleCloseAddEditModal();
-      if (newRewardsToAdd.length > 0) {
-        await fetchRewards();
+      if (successCount > 0) {
+        showToast({
+          type: "success",
+          title: `${successCount} reward(s) created successfully`,
+        });
       }
     }
-  }, [
-    multipleRewardsInput,
-    editIndex,
-    selectedReward,
-    rewards,
-    fetchRewards,
-    handleCloseAddEditModal,
-    handleUpdateReward,
-  ]);
+  }
+}, [
+  multipleRewardsInput,
+  editIndex,
+  selectedReward,
+  rewards,
+  handleCloseAddEditModal,
+  handleUpdateReward,
+  fetchRewards,
+]);
 
   const handleDuplicateAction = useCallback(
     async (actionType, rewardPair) => {
@@ -407,47 +942,51 @@ const RewardsScreen = () => {
         return;
       }
 
-      const { newReward, existingReward, type } = rewardPair;
+      const { newReward, existingReward } = rewardPair;
 
       if (actionType === "replace") {
-        if (type === "existingDuplicateInDB") {
-          const updatedRewardPayload = { ...newReward, id: existingReward.id };
-          await handleUpdateReward(updatedRewardPayload);
-        } else {
-          showToast({
-            type: "error",
-            title: "Cannot replace a non-existent reward or unknown type.",
-          });
-        }
-      } else if (actionType === "addAnyway") {
         try {
-          const payload = { gym_id: gymId, reward: newReward };
-          const response = await createRewardAPI(payload);
-          if (response?.status === 201 || response?.status === 200) {
-            setRewards((prev) => [...prev, response.data]);
+          await deleteRewardAPI(existingReward.id, gymId);
+          
+          const success = await createNewReward(newReward);
+          
+          if (success) {
+            showToast({
+              type: "success",
+              title: "Reward replaced successfully",
+            });
           } else {
             showToast({
               type: "error",
-              title: `Failed to create duplicate reward ${newReward.gift}: ${
-                response?.detail || "Unknown error"
-              }`,
+              title: "Failed to replace reward",
             });
           }
         } catch (error) {
+          console.error("Replace reward error:", error);
           showToast({
             type: "error",
-            title: `Failed to create duplicate reward ${newReward.gift}`,
+            title: "Failed to replace reward",
           });
-          console.error("Create duplicate reward API error:", error);
+        }
+      } else if (actionType === "addAnyway") {
+        const success = await createNewReward(newReward);
+        if (success) {
+          showToast({
+            type: "success",
+            title: "Reward created successfully",
+          });
+        } else {
+          showToast({
+            type: "error",
+            title: "Failed to create reward",
+          });
         }
       }
 
-      // Remove the processed duplicate from the list
       setDuplicateInfo((prevInfo) =>
         prevInfo.filter((item) => item !== rewardPair)
       );
 
-      // If this was the last duplicate, close the modal and refresh
       if (duplicateInfo.length === 1) {
         setIsDuplicateModalVisible(false);
         setDuplicateInfo([]);
@@ -455,23 +994,21 @@ const RewardsScreen = () => {
       }
       setIsLoading(false);
     },
-    [fetchRewards, handleUpdateReward, duplicateInfo]
+    [duplicateInfo, fetchRewards]
   );
 
   const handleToggleCardDropdown = useCallback((rewardId) => {
     setOpenDropdownId((prevId) => (prevId === rewardId ? null : rewardId));
   }, []);
 
-  // Handle duplicate modal close
   const handleCloseDuplicateModal = useCallback(async () => {
     setIsDuplicateModalVisible(false);
     setDuplicateInfo([]);
     await fetchRewards();
   }, [fetchRewards]);
 
-  if (isLoading) {
-    // You can keep a loader here, or display shimmers if you prefer.
-    // return <FitnessLoader />;
+  if (isLoading && rewards.length === 0) {
+    return <FitnessLoader />;
   }
 
   return (
@@ -566,8 +1103,7 @@ const RewardsScreen = () => {
         </TouchableOpacity>
       )}
 
-      {/* AddEdit Modal */}
-      <AddEditRewardModal
+      <FullPageRewardModal
         visible={isAddEditModalVisible}
         onClose={handleCloseAddEditModal}
         rewardsInput={multipleRewardsInput}
@@ -577,16 +1113,13 @@ const RewardsScreen = () => {
         isLoading={isLoading}
       />
 
-      {/* Detail Modal */}
       <RewardDetailsModal
         visible={isDetailModalVisible}
         onClose={handleCloseDetailModal}
         reward={selectedReward}
       />
 
-      {/* CRITICAL FIX: Platform-specific modal rendering */}
       {Platform.OS === "ios" ? (
-        // iOS Modal - with overlay handling for proper modal hierarchy
         <Modal
           visible={isDuplicateModalVisible}
           transparent={true}
@@ -615,7 +1148,6 @@ const RewardsScreen = () => {
           </TouchableOpacity>
         </Modal>
       ) : (
-        // Android Modal - simple rendering without overlay conflicts
         isDuplicateModalVisible && (
           <DuplicateXPConfirmationModal
             visible={isDuplicateModalVisible}
@@ -713,12 +1245,294 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     marginHorizontal: 4,
   },
-  // Enhanced modal overlay for both iOS and Android compatibility
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  
+  fullPageModal: {
+    flex: 1,
+    backgroundColor: "#FFF",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E5E5",
+    backgroundColor: "#FFF",
+  },
+  modalBackButton: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+    textAlign: "center",
+    marginHorizontal: 16,
+  },
+  saveButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  disabledButton: {
+    backgroundColor: "#999",
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: "#F8F8F8",
+  },
+  rewardInputContainer: {
+    backgroundColor: "#FFF",
+    margin: 16,
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  rewardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  rewardNumber: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
+  removeButton: {
+    padding: 8,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FED7D7",
+  },
+  imageSelector: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  imageContainer: {
+    position: "relative",
+    marginBottom: 8,
+  },
+  selectedRewardImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+    borderStyle: "dashed",
+  },
+  imageOverlay: {
+    position: "absolute",
+    bottom: -5,
+    right: -5,
+    backgroundColor: "#007AFF",
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  imageSelectorText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: "#FFF",
+  },
+  multilineInput: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  addAnotherButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    margin: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    borderStyle: "dashed",
+  },
+  addAnotherText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+
+  // Image Picker Modal Styles
+  imagePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imagePickerContainer: {
+    backgroundColor: "#FFF",
+    width: width * 0.9,
+    maxHeight: height * 0.8,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  imagePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E5E5",
+  },
+  imagePickerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
+  imagePickerContent: {
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  defaultImagesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  imageOption: {
+    width: (width * 0.9 - 48) / 2 - 8,
+    aspectRatio: 1,
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  selectedImageOption: {
+    borderColor: "#007AFF",
+  },
+  defaultImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 10,
+  },
+  selectedOverlay: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 2,
+  },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8F9FA",
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    borderStyle: "dashed",
+    marginBottom: 20,
+  },
+  uploadButtonText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  customImagePreview: {
+    alignItems: "center",
+  },
+  customImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+  },
+  imagePickerFooter: {
+    flexDirection: "row",
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E5E5",
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "600",
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginLeft: 8,
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    color: "#FFF",
+    fontWeight: "600",
   },
 });
 

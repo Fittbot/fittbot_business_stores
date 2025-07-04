@@ -55,7 +55,7 @@ const Feedback = () => {
         return;
       }
       const response = await getFeedbacksAPI(gymId);
-
+      console.log(response.data);
       if (response?.status === 200) {
         setAllFeedbacks(response?.data);
       } else {
@@ -81,7 +81,7 @@ const Feedback = () => {
 
   const renderFeedbackItem = ({ item }) => (
     <ReviewCard
-      quote={item.feedback || ""}
+      quote={item.tag || ""}
       description={item.feedback || ""}
       userName={item.client_name}
       userLocation={item.timing.split("T")[0]}

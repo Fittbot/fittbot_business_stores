@@ -17,6 +17,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -43,7 +44,7 @@ const ImageUploadModal = ({
   onClose,
   onImageSelect,
   title,
-  aspectRatio = [16, 9], // Default aspect ratio for cover, [1, 1] for logo
+  aspectRatio = [16, 9],
 }) => {
   const selectImage = async () => {
     try {
@@ -153,13 +154,11 @@ const OwnerProfile = () => {
   const [locationPermission, setLocationPermission] = useState(null);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
 
-  // Tab Management
   const [activeTab, setActiveTab] = useState("personal");
   const [isEditing, setIsEditing] = useState(false);
   const [gymList, setGymList] = useState([]);
   const [gymCount, setGymCount] = useState(0);
 
-  // Password Change
   const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
   const [passwordData, setPasswordData] = useState({
     oldPassword: "",
@@ -167,12 +166,10 @@ const OwnerProfile = () => {
     confirmNewPassword: "",
   });
 
-  // Show/Hide Password
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Form Data
   const [personalDetails, setPersonalDetails] = useState([]);
   const [gymDetails, setGymDetails] = useState([]);
   const [paymentDetails, setPaymentDetails] = useState([]);
@@ -181,7 +178,6 @@ const OwnerProfile = () => {
   const [isFullImageModalVisible, setFullImageModalVisible] = useState(false);
   const [fullImageSource, setFullImageSource] = useState(null);
 
-  // New states for image upload modals
   const [isLogoUploadModalVisible, setLogoUploadModalVisible] = useState(false);
   const [isCoverUploadModalVisible, setCoverUploadModalVisible] =
     useState(false);
@@ -212,7 +208,6 @@ const OwnerProfile = () => {
         return;
       }
 
-      // Get presigned URL for logo upload
       const { data: uploadResp } = await axiosInstance.get(
         "/gym_profile/upload-url",
         {
@@ -235,7 +230,6 @@ const OwnerProfile = () => {
         type: contentType,
       });
 
-      // Upload to S3
       const s3Resp = await fetch(upload.url, {
         method: "POST",
         body: form,
@@ -249,7 +243,6 @@ const OwnerProfile = () => {
         return;
       }
 
-      // Confirm upload
       const res = await axiosInstance.post("/gym_profile/confirm", {
         cdn_url,
         gym_id: gym_id,
@@ -292,7 +285,6 @@ const OwnerProfile = () => {
         return;
       }
 
-      // Get presigned URL for cover upload
       const { data: uploadResp } = await axiosInstance.get(
         "/gym_profile/upload-url",
         {
@@ -315,7 +307,6 @@ const OwnerProfile = () => {
         type: contentType,
       });
 
-      // Upload to S3
       const s3Resp = await fetch(upload.url, {
         method: "POST",
         body: form,
@@ -329,7 +320,6 @@ const OwnerProfile = () => {
         return;
       }
 
-      // Confirm upload
       const res = await axiosInstance.post("/gym_profile/confirm", {
         cdn_url,
         gym_id: gym_id,
@@ -353,17 +343,14 @@ const OwnerProfile = () => {
     }
   };
 
-  // Edit Data
   const [editData, setEditData] = useState({
     name: "",
     email: "",
     contact_number: "",
     dob: "",
     age: "",
-    // Gym data
     gymName: "",
     location: "",
-    // Payment data
     account_number: "",
     account_holdername: "",
     account_ifsccode: "",
@@ -375,6 +362,8 @@ const OwnerProfile = () => {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dob, setDob] = useState(null);
+  // Add temporary date state for iOS picker
+  const [tempDob, setTempDob] = useState(new Date());
 
   const handleEditPress = () => {
     setEditData({
@@ -384,10 +373,8 @@ const OwnerProfile = () => {
         personalDetails.find((item) => item.key === "contact_number")?.value ||
         "",
       dob: personalDetails.find((item) => item.key === "dob")?.value || "",
-      // Gym data
       gymName: gymDetails.find((item) => item.key === "gymName")?.value || "",
       location: gymDetails.find((item) => item.key === "location")?.value || "",
-      // Payment data
       account_number:
         paymentDetails.find((item) => item.key === "account_number")?.value ||
         "",
@@ -413,6 +400,43 @@ const OwnerProfile = () => {
     setIsEditing(false);
   };
 
+  // Updated date change handler for iOS/Android compatibility
+  const handleDateChange = (event, selectedDate) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (selectedDate && event.type !== "dismissed") {
+        const day = String(selectedDate.getDate()).padStart(2, "0");
+        const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+        const year = selectedDate.getFullYear();
+        const formattedDate = `${year}-${month}-${day}`;
+        setDob(selectedDate);
+        setEditData({ ...editData, dob: formattedDate });
+      }
+    } else {
+      // iOS - just update temp date
+      if (selectedDate) {
+        setTempDob(selectedDate);
+      }
+    }
+  };
+
+  // iOS picker confirmation handlers
+  const confirmDateSelection = () => {
+    const day = String(tempDob.getDate()).padStart(2, "0");
+    const month = String(tempDob.getMonth() + 1).padStart(2, "0");
+    const year = tempDob.getFullYear();
+    const formattedDate = `${year}-${month}-${day}`;
+    setDob(tempDob);
+    setEditData({ ...editData, dob: formattedDate });
+    setShowDatePicker(false);
+  };
+
+  // Cancel handler for iOS
+  const cancelDateSelection = () => {
+    setTempDob(dob || new Date());
+    setShowDatePicker(false);
+  };
+
   const handleEditSubmit = async () => {
     try {
       const owner_id = await getToken("owner_id");
@@ -431,7 +455,6 @@ const OwnerProfile = () => {
         return;
       }
 
-      // Format date to SQL format if needed
       let formattedDob = editData.dob;
       if (editData.dob && editData.dob.includes("/")) {
         const [day, month, year] = editData.dob.split("/");
@@ -472,6 +495,10 @@ const OwnerProfile = () => {
       const response = await updateProfileAPI(payload);
       if (response?.status === 200) {
         if (response?.is_changed) {
+          showToast({
+            type: "success",
+            title: "Profile updated successfully",
+          });
           router.push("/");
         }
         showToast({
@@ -554,6 +581,7 @@ const OwnerProfile = () => {
   const getGymLocation = async () => {
     setIsLocationLoading(true);
     try {
+      // Check if we have location permission first
       const { status, canAskAgain } =
         await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status);
@@ -582,21 +610,73 @@ const OwnerProfile = () => {
               "Location permission is required to set your gym's location.",
           });
         }
-
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
+      // Add a small delay to ensure permission is fully processed on iOS
+      if (Platform.OS === "ios") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // Now try to get location with proper accuracy settings and retry logic
+      let location = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!location && attempts < maxAttempts) {
+        try {
+          location = await Location.getCurrentPositionAsync({
+            // Use proper LocationAccuracy enum values for each platform
+            accuracy:
+              Platform.OS === "android"
+                ? Location.LocationAccuracy.High
+                : Location.LocationAccuracy.Best,
+            maximumAge: 10000, // Accept cached location up to 10 seconds old
+            timeout: 10000, // 10 second timeout
+          });
+          break;
+        } catch (locationError) {
+          attempts++;
+          console.log(`Location attempt ${attempts} failed:`, locationError);
+          if (attempts < maxAttempts) {
+            // Wait a bit before retrying
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          } else {
+            throw locationError;
+          }
+        }
+      }
+
+      if (!location) {
+        throw new Error("Unable to get location after multiple attempts");
+      }
 
       setIsLocationLoading(false);
       return location.coords;
     } catch (error) {
       setIsLocationLoading(false);
+      console.error("Location error:", error);
+
+      // Provide more specific error messages based on error type
+      let errorMessage =
+        "Could not get your current location. Please try again.";
+
+      if (error.message.includes("denied")) {
+        errorMessage =
+          "Location access was denied. Please enable location permissions in settings.";
+      } else if (error.message.includes("timeout")) {
+        errorMessage = "Location request timed out. Please try again.";
+      } else if (error.message.includes("unavailable")) {
+        errorMessage =
+          "Location services are unavailable. Please check your device settings.";
+      } else if (error.message.includes("multiple attempts")) {
+        errorMessage =
+          "Unable to get accurate location. Please ensure location services are enabled and try again.";
+      }
+
       showToast({
         type: "error",
-        title: "Could not get your current location. Please try again.",
+        title: errorMessage,
       });
     }
   };
@@ -675,7 +755,6 @@ const OwnerProfile = () => {
       }
 
       const response = await getProfileDataAPI(gymId, ownerId, null, "owner");
-      console.log(response);
       let { name, email, contact_number, dob, age } =
         response?.data?.owner_data;
       setGymData(response?.data?.gym_data);
@@ -767,37 +846,37 @@ const OwnerProfile = () => {
           icon: "apps-outline",
           label: "Account No.",
           key: "account_number",
-          value: account_number || "Not Added",
+          value: account_number || "",
         },
         {
           icon: "person-outline",
           label: "Account Holder Name",
           key: "account_holdername",
-          value: account_holdername || "Not Added",
+          value: account_holdername || "",
         },
         {
           icon: "card-outline",
           label: "UPI ID",
           key: "upi_id",
-          value: upi_id || "Not Added",
+          value: upi_id || "",
         },
         {
           icon: "barcode-outline",
           label: "IFSC",
           key: "account_ifsccode",
-          value: account_ifsccode || "Not Added",
+          value: account_ifsccode || "",
         },
         {
           icon: "git-branch-outline",
           label: "Branch",
           key: "account_branch",
-          value: account_branch || "Not Added",
+          value: account_branch || "",
         },
         {
           icon: "git-branch-outline",
           label: "GST No.",
           key: "gst_number",
-          value: gst_number || "Not Added",
+          value: gst_number || "",
         },
       ];
 
@@ -839,6 +918,7 @@ const OwnerProfile = () => {
               value={editData.name}
               onChangeText={(text) => setEditData({ ...editData, name: text })}
               placeholder="Enter your full name"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -853,6 +933,7 @@ const OwnerProfile = () => {
               keyboardType="phone-pad"
               placeholder="Enter your phone number"
               maxLength={10}
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -865,6 +946,7 @@ const OwnerProfile = () => {
               keyboardType="email-address"
               autoCapitalize="none"
               placeholder="Enter your email address"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -872,33 +954,67 @@ const OwnerProfile = () => {
             <Text style={styles.inputLabel}>Date of Birth</Text>
             <TouchableOpacity
               style={styles.datePickerButton}
-              onPress={() => setShowDatePicker(true)}
+              onPress={() => {
+                setTempDob(dob || new Date());
+                setShowDatePicker(true);
+              }}
             >
               <Text style={styles.dateText}>
                 {editData.dob || "Select Date of Birth"}
               </Text>
               <Ionicons name="calendar-outline" size={20} color="#777" />
             </TouchableOpacity>
-            {showDatePicker && (
+
+            {/* iOS Date Picker Modal */}
+            {Platform.OS === "ios" && showDatePicker && (
+              <Modal
+                transparent={true}
+                animationType="slide"
+                visible={showDatePicker}
+                onRequestClose={cancelDateSelection}
+              >
+                <TouchableWithoutFeedback onPress={cancelDateSelection}>
+                  <View style={styles.pickerModalContainer}>
+                    <TouchableWithoutFeedback
+                      onPress={(e) => e.stopPropagation()}
+                    >
+                      <View style={styles.pickerContainer}>
+                        <View style={styles.pickerHeader}>
+                          <TouchableOpacity onPress={cancelDateSelection}>
+                            <Text style={styles.pickerCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.pickerTitle}>
+                            Select Date of Birth
+                          </Text>
+                          <TouchableOpacity onPress={confirmDateSelection}>
+                            <Text style={styles.pickerConfirmText}>Done</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <DateTimePicker
+                          value={tempDob}
+                          mode="date"
+                          display="spinner"
+                          themeVariant="light"
+                          textColor="#000000"
+                          onChange={handleDateChange}
+                          maximumDate={new Date()}
+                          style={styles.iosPickerStyle}
+                        />
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </View>
+                </TouchableWithoutFeedback>
+              </Modal>
+            )}
+
+            {/* Android Date Picker */}
+            {Platform.OS === "android" && showDatePicker && (
               <DateTimePicker
                 value={dob ? new Date(dob) : new Date()}
                 mode="date"
                 display="default"
                 maximumDate={new Date()}
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(false);
-                  if (selectedDate && event.type !== "dismissed") {
-                    const day = String(selectedDate.getDate()).padStart(2, "0");
-                    const month = String(selectedDate.getMonth() + 1).padStart(
-                      2,
-                      "0"
-                    );
-                    const year = selectedDate.getFullYear();
-                    const formattedDate = `${year}-${month}-${day}`;
-                    setDob(selectedDate);
-                    setEditData({ ...editData, dob: formattedDate });
-                  }
-                }}
+                onChange={handleDateChange}
               />
             )}
           </View>
@@ -961,6 +1077,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, gymName: text })
               }
               placeholder="Enter your gym name"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -973,6 +1090,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, location: text })
               }
               placeholder="Enter gym location"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1071,6 +1189,7 @@ const OwnerProfile = () => {
               }
               keyboardType="numeric"
               placeholder="Enter account number"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1083,6 +1202,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, account_holdername: text })
               }
               placeholder="Enter account holder name"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1096,6 +1216,7 @@ const OwnerProfile = () => {
               }
               placeholder="Enter IFSC code"
               autoCapitalize="characters"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1108,6 +1229,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, account_branch: text })
               }
               placeholder="Enter branch name"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1120,6 +1242,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, upi_id: text })
               }
               placeholder="Enter UPI ID"
+              placeholderTextColor={"#AAA"}
             />
           </View>
 
@@ -1132,6 +1255,7 @@ const OwnerProfile = () => {
                 setEditData({ ...editData, gst_number: text })
               }
               placeholder="Enter GST number"
+              placeholderTextColor={"#AAA"}
             />
           </View>
         </View>
@@ -1249,7 +1373,6 @@ const OwnerProfile = () => {
                   />
                 </TouchableOpacity>
 
-                {/* Logo edit icon */}
                 <TouchableOpacity
                   style={styles.logoEditButton}
                   onPress={() => setLogoUploadModalVisible(true)}
@@ -1270,7 +1393,6 @@ const OwnerProfile = () => {
               </View>
             </View>
 
-            {/* Cover photo edit icon */}
             <TouchableOpacity
               style={styles.coverEditButton}
               onPress={() => setCoverUploadModalVisible(true)}
@@ -1378,20 +1500,18 @@ const OwnerProfile = () => {
         </View>
       )}
 
-      {/* All Modals */}
       <FullImageModal
         isVisible={isFullImageModalVisible}
         imageSource={fullImageSource}
         onClose={() => setFullImageModalVisible(false)}
       />
 
-      {/* New Upload Modals */}
       <ImageUploadModal
         isVisible={isLogoUploadModalVisible}
         onClose={() => setLogoUploadModalVisible(false)}
         onImageSelect={handleLogoUpload}
         title="Upload Gym Logo"
-        aspectRatio={[1, 1]} // Square aspect ratio for logo
+        aspectRatio={[1, 1]}
       />
 
       <ImageUploadModal
@@ -1399,10 +1519,9 @@ const OwnerProfile = () => {
         onClose={() => setCoverUploadModalVisible(false)}
         onImageSelect={handleCoverUpload}
         title="Upload Cover Photo"
-        aspectRatio={[16, 9]} // Wide aspect ratio for cover
+        aspectRatio={[16, 9]}
       />
 
-      {/* Password Change Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -1427,6 +1546,7 @@ const OwnerProfile = () => {
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="Enter current password"
+                  placeholderTextColor={"#AAA"}
                   secureTextEntry={!showOldPassword}
                   value={passwordData.oldPassword}
                   onChangeText={(text) =>
@@ -1452,6 +1572,7 @@ const OwnerProfile = () => {
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="Enter new password"
+                  placeholderTextColor={"#AAA"}
                   secureTextEntry={!showNewPassword}
                   value={passwordData.newPassword}
                   onChangeText={(text) =>
@@ -1479,6 +1600,7 @@ const OwnerProfile = () => {
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="Confirm new password"
+                  placeholderTextColor={"#AAA"}
                   secureTextEntry={!showConfirmPassword}
                   value={passwordData.confirmNewPassword}
                   onChangeText={(text) =>
@@ -1931,7 +2053,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // New styles for image upload modal
   imageUploadModalContainer: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -1966,7 +2087,6 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "500",
   },
-  // New styles for edit buttons on gym images
   logoEditButton: {
     position: "absolute",
     bottom: -5,
@@ -1996,6 +2116,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 2,
     borderColor: "white",
+  },
+  // iOS Picker Modal Styles (added from previous examples)
+  pickerModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  pickerConfirmText: {
+    fontSize: 16,
+    color: "#3498db",
+    fontWeight: "600",
+  },
+  iosPickerStyle: {
+    height: 200,
+    width: "100%",
   },
 });
 

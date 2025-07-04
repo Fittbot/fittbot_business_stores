@@ -13,17 +13,10 @@ import {
   Alert,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import {
-  MaterialIcons,
-  Ionicons,
-  Entypo,
-  FontAwesome5,
-} from "@expo/vector-icons";
+import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Image from "expo-image";
 import NewOwnerHeader from "../../../components/ui/Header/NewOwnerHeader";
-import { router, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   postGymAnnouncementsAPI,
   updateGymAnnouncementsAPI,
@@ -147,18 +140,18 @@ const OfferForm = ({
   }, [announcement]);
 
   // Request media library permissions
-  useEffect(() => {
-    (async () => {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        showToast({
-          type: "error",
-          title: "Camera roll permissions are required to upload images!",
-        });
-      }
-    })();
-  }, []);
+  // useEffect(() => {
+  //   (async () => {
+  //     const { status } =
+  //       await ImagePicker.requestMediaLibraryPermissionsAsync();
+  //     if (status !== "granted") {
+  //       showToast({
+  //         type: "error",
+  //         title: "Camera roll permissions are required to upload images!",
+  //       });
+  //     }
+  //   })();
+  // }, []);
 
   // Handle input change
   const handleInputChange = (field, value) => {
@@ -280,7 +273,7 @@ const OfferForm = ({
           <View style={styles.formContainer}>
             <FormField
               label="Title"
-              placeholder="E.g., Summer Special"
+              placeholder="E.g., Holiday Announcement"
               iconName="local-offer"
               value={formData.title}
               onChangeText={(text) => handleInputChange("title", text)}
@@ -288,7 +281,7 @@ const OfferForm = ({
 
             <FormField
               label="Description"
-              placeholder="Describe your offer in detail..."
+              placeholder="Describe your announcement in detail..."
               value={formData.description}
               onChangeText={(text) => handleInputChange("description", text)}
               multiline={true}

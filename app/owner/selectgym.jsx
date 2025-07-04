@@ -30,7 +30,6 @@ const selectgym = () => {
 
   const goToGym = async () => {
     if (selectedGym) {
-      console.log(selectedGym, owner_id);
       try {
         await saveToken("gym_id", selectedGym.gym_id.toString());
         await saveToken("owner_id", owner_id);
@@ -46,7 +45,6 @@ const selectgym = () => {
 
         router.push("/owner/home");
       } catch (error) {
-        console.log(error);
         showToast({
           type: "error",
           title: "An error occurred. Please try again.",
@@ -187,7 +185,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "90%",
     alignSelf: "center",
-    maxWidth: 600, // Add maximum width for larger screens
+    maxWidth: 600,
   },
   scrollView: {
     flex: 1,

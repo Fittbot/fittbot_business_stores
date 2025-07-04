@@ -23,13 +23,12 @@ import {
 } from "../../services/Api";
 import * as SecureStore from "expo-secure-store";
 import { createValidationSchema } from "../../utils/validation";
-import Toast from "react-native-toast-message";
-import { showToast } from "../../utils/Toaster";
 import { getToken } from "../../utils/auth";
 import NewOwnerHeader from "../../components/ui/Header/NewOwnerHeader";
 import TabHeader from "../../components/home/finances/TabHeader";
 import { useRouter } from "expo-router";
 import HardwareBackHandler from "../../components/HardwareBackHandler";
+import { showToast } from "../../utils/Toaster";
 
 const AddEnquiry = () => {
   const router = useRouter();
@@ -65,6 +64,10 @@ const AddEnquiry = () => {
       let response = await AddClientEnquiry(payload);
 
       if (response?.status === 200) {
+        showToast({
+          type: "success",
+          title: "Enquiry added successfully",
+        });
         fetchClientQueries();
       }
 
@@ -96,10 +99,7 @@ const AddEnquiry = () => {
       if (response.status === 200) {
         showToast({
           type: "success",
-          // title: 'Validation',
-          title: response?.message,
-          // desc: response?.message,
-          visibilityTime: 1500,
+          title:"Enquiry status updated succesfully",
         });
         fetchClientQueries();
       }

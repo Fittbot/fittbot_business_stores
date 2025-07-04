@@ -83,47 +83,53 @@ export default function RootLayout() {
             <Stack>
               <Stack.Screen
                 name="owner/(tabs)"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
 
               <Stack.Screen
                 name="owner/(diet)"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
 
               <Stack.Screen
                 name="owner/(workout)"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
 
               <Stack.Screen
                 name="owner/(feed)"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               {/* <Stack.Screen name="owner/(tabs)/manageClients" options={{ headerShown: false }} /> */}
               <Stack.Screen
                 name="shimmerExamples"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen name="+not-found" />
-              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="index"
+                options={{ headerShown: false, gestureEnabled: false }}
+              />
               <Stack.Screen
                 name="forgotpassword"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
-              <Stack.Screen name="register" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="register"
+                options={{ headerShown: false, gestureEnabled: false }}
+              />
               <Stack.Screen
                 name="changepassword"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="verificationowner"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
 
               <Stack.Screen
                 name="owner/allclients"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/Help"
@@ -131,55 +137,55 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="owner/assigntrainer"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/assigntrainerpage"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/assignworkoutpage"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/assigndietpage"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/assignplans"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/clientdata"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/clientform"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/diet"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/gymdata"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/manageplans"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/trainerform"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/workout_schedule"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/selectgym"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/ownerprofile"
@@ -191,7 +197,7 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="owner/rewards"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/viewallfoods"
@@ -199,39 +205,39 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="owner/addEnquiry"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/manageNutritionAndWorkoutTemplate"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/gymPlans"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/clientEstimate"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/unpaidMembers"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/paidMembersReceiptListPage"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/manageClients"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/clientsManagement"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/client/[id]"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
               <Stack.Screen
                 name="owner/rateus"
@@ -240,7 +246,7 @@ export default function RootLayout() {
 
               <Stack.Screen
                 name="owner/OtpVerification"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, gestureEnabled: false }}
               />
             </Stack>
             <StatusBar style="auto" />

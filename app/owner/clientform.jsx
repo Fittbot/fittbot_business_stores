@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Modal,
   Platform,
@@ -14,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  TouchableWithoutFeedback,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import RNPickerSelect from "react-native-picker-select";
@@ -47,8 +47,10 @@ const AddClientScreen = () => {
     trainingType: "",
     admissionFee: "",
     discountedFee: "",
+    admissionNumber: "",
     batchType: "",
     expiry: "",
+    feeCollectionStartDate: null,
     paymentMethod: "",
     paymentReferenceNumber: "",
   });
@@ -66,9 +68,18 @@ const AddClientScreen = () => {
   const [isDataFromQR, setIsDataFromQR] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showFeeCollectionDatePicker, setShowFeeCollectionDatePicker] =
+    useState(false);
+  const [hasUserSelectedDOB, setHasUserSelectedDOB] = useState(false);
+
+  // Add temporary date states for iOS picker
+  const [tempDateOfBirth, setTempDateOfBirth] = useState(new Date());
+  const [tempFeeCollectionDate, setTempFeeCollectionDate] = useState(
+    new Date()
+  );
+
   const router = useRouter();
 
-  // Calculate age from date of birth
   const calculateAge = (dateOfBirth) => {
     const today = new Date();
     const birthDate = new Date(dateOfBirth);
@@ -85,8 +96,8 @@ const AddClientScreen = () => {
     return age;
   };
 
-  // Format date to SQL format (YYYY-MM-DD)
   const formatDateForSQL = (date) => {
+    if (!date) return null;
     const d = new Date(date);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -94,8 +105,8 @@ const AddClientScreen = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // Format date for display
   const formatDateForDisplay = (date) => {
+    if (!date) return "Select Date";
     const d = new Date(date);
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -163,8 +174,11 @@ const AddClientScreen = () => {
         break;
 
       case "dateOfBirth":
-        if (!value) error = "Date of birth is required";
-        else {
+        if (!hasUserSelectedDOB) {
+          error = "Please select your date of birth";
+        } else if (!value) {
+          error = "Date of birth is required";
+        } else {
           const age = calculateAge(value);
           if (age < 18 || age > 100) error = "Age must be between 18-100 years";
         }
@@ -228,7 +242,6 @@ const AddClientScreen = () => {
       return updatedForm;
     });
 
-    // Validate field on change
     const error = validateField(field, value);
     setErrors((prevErrors) => ({ ...prevErrors, [field]: error }));
   };
@@ -239,13 +252,69 @@ const AddClientScreen = () => {
     setErrors((prevErrors) => ({ ...prevErrors, [field]: error }));
   };
 
+  // Updated date change handlers for iOS/Android compatibility
   const handleDateChange = (event, selectedDate) => {
-    const currentDate = selectedDate || form.dateOfBirth;
-    setShowDatePicker(Platform.OS === "ios");
-
-    if (selectedDate) {
-      handleInputChange("dateOfBirth", currentDate);
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (selectedDate) {
+        setHasUserSelectedDOB(true);
+        setForm((prevForm) => ({ ...prevForm, dateOfBirth: selectedDate }));
+        const age = calculateAge(selectedDate);
+        let dobError = "";
+        if (age < 18 || age > 100) {
+          dobError = "Age must be between 18-100 years";
+        }
+        setErrors((prevErrors) => ({ ...prevErrors, dateOfBirth: dobError }));
+      }
+    } else {
+      // iOS - just update temp date
+      if (selectedDate) {
+        setTempDateOfBirth(selectedDate);
+      }
     }
+  };
+
+  const handleFeeCollectionDateChange = (event, selectedDate) => {
+    if (Platform.OS === "android") {
+      setShowFeeCollectionDatePicker(false);
+      if (selectedDate) {
+        handleInputChange("feeCollectionStartDate", selectedDate);
+      }
+    } else {
+      // iOS - just update temp date
+      if (selectedDate) {
+        setTempFeeCollectionDate(selectedDate);
+      }
+    }
+  };
+
+  // iOS picker confirmation handlers
+  const confirmDateOfBirthSelection = () => {
+    setHasUserSelectedDOB(true);
+    setForm((prevForm) => ({ ...prevForm, dateOfBirth: tempDateOfBirth }));
+    const age = calculateAge(tempDateOfBirth);
+    let dobError = "";
+    if (age < 18 || age > 100) {
+      dobError = "Age must be between 18-100 years";
+    }
+    setErrors((prevErrors) => ({ ...prevErrors, dateOfBirth: dobError }));
+    setShowDatePicker(false);
+  };
+
+  const confirmFeeCollectionDateSelection = () => {
+    handleInputChange("feeCollectionStartDate", tempFeeCollectionDate);
+    setShowFeeCollectionDatePicker(false);
+  };
+
+  // Cancel handlers for iOS
+  const cancelDateOfBirthSelection = () => {
+    setTempDateOfBirth(form.dateOfBirth || new Date());
+    setShowDatePicker(false);
+  };
+
+  const cancelFeeCollectionDateSelection = () => {
+    setTempFeeCollectionDate(form.feeCollectionStartDate || new Date());
+    setShowFeeCollectionDatePicker(false);
   };
 
   const fetchQRData = async (qrData) => {
@@ -263,15 +332,15 @@ const AddClientScreen = () => {
       const response = await getClientFromQRAPI(qrData);
 
       if (response?.status === 200) {
-        // Convert date_of_birth string to Date object if available
         let dateOfBirth = new Date();
         if (response.data.date_of_birth) {
           dateOfBirth = new Date(response.data.date_of_birth);
+          setHasUserSelectedDOB(true);
         } else if (response.data.age) {
-          // If age is provided instead of date_of_birth, calculate approximate date_of_birth
           const currentYear = new Date().getFullYear();
           const birthYear = currentYear - parseInt(response.data.age);
-          dateOfBirth = new Date(birthYear, 0, 1); // January 1st of birth year
+          dateOfBirth = new Date(birthYear, 0, 1);
+          setHasUserSelectedDOB(true);
         }
 
         setForm({
@@ -289,14 +358,17 @@ const AddClientScreen = () => {
           trainingType: "",
           batchType: "",
           admissionFee: "",
+          admissionNumber: "",
           discountedFee: "",
           expiry: "",
+          feeCollectionStartDate: null,
           paymentMethod: "",
           paymentReferenceNumber: "",
         });
 
         setIsDataFromQR(true);
         setShowForm(true);
+        setErrors((prevErrors) => ({ ...prevErrors, dateOfBirth: "" }));
         showToast({
           type: "success",
           title:
@@ -418,8 +490,12 @@ const AddClientScreen = () => {
         training_type: parseInt(form.trainingType),
         admission_fee: parseInt(form.admissionFee),
         discounted_fee: parseInt(form.discountedFee),
+        admission_number: form.admissionNumber,
         batch_type: parseInt(form.batchType),
         expiry: form.expiry,
+        fee_collection_start_date: formatDateForSQL(
+          form.feeCollectionStartDate
+        ),
         payment_method: form.paymentMethod,
         payment_reference_number: form.paymentReferenceNumber || null,
       };
@@ -428,7 +504,7 @@ const AddClientScreen = () => {
 
       if (response.status === 200) {
         setLoading(false);
-
+        setIsConfirmationModalVisible(false);
         showToast({
           type: "success",
           title: "Client data added successfully!",
@@ -447,8 +523,10 @@ const AddClientScreen = () => {
           trainingType: "",
           batchType: "",
           admissionFee: "",
+          admissionNumber: "",
           discountedFee: "",
           expiry: "",
+          feeCollectionStartDate: null,
           paymentMethod: "",
           paymentReferenceNumber: "",
         });
@@ -457,6 +535,7 @@ const AddClientScreen = () => {
         setCurrentStep(1);
         setShowForm(false);
         setIsDataFromQR(false);
+        setHasUserSelectedDOB(false);
         setIsConfirmationModalVisible(false);
       } else {
         showToast({
@@ -466,7 +545,6 @@ const AddClientScreen = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.log(error);
       showToast({
         type: "error",
         title: "An error occurred while submitting client data.",
@@ -482,10 +560,8 @@ const AddClientScreen = () => {
   if (plans?.length === 0 || batches?.length === 0) {
     return (
       <>
-        <NewOwnerHeader
-          onBackButtonPress={() => router.push("/owner/home")}
-          text={"Add Clients"}
-        />
+        {/* <View style={{ marginTop: Platform.OS === "ios" ? 10 : 0 }}> */}
+
         <View style={styles.noFeedContainer}>
           <Text style={styles.headerTitle}>Add Clients</Text>
           <MaterialCommunityIcons
@@ -511,7 +587,15 @@ const AddClientScreen = () => {
             />
             <Text style={styles.noFeedButtonText}>Add Plans or Batches</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.noFeedRefreshButton}
+            onPress={() => router.push("/owner/home")}
+          >
+            <Text style={styles.noFeedButtonText}>Back to Home</Text>
+          </TouchableOpacity>
         </View>
+        {/* </View> */}
       </>
     );
   }
@@ -532,6 +616,7 @@ const AddClientScreen = () => {
           onBackButtonPress={() => {
             setShowForm(false);
             setIsDataFromQR(false);
+            setHasUserSelectedDOB(false);
             setCurrentStep(1);
           }}
           text={"Add Clients"}
@@ -555,6 +640,8 @@ const AddClientScreen = () => {
         onBackPress={() => {
           if (showForm) {
             setShowForm(false);
+            setHasUserSelectedDOB(false);
+            setErrors({});
             return true;
           }
           return false;
@@ -588,7 +675,10 @@ const AddClientScreen = () => {
             subtitle={"Manually add a client by entering his basic details"}
             buttonText={"Add"}
             imagePath={require("../../assets/images/TRAINER 1.png")}
-            onPress={() => setShowForm(true)}
+            onPress={() => {
+              setShowForm(true);
+              setHasUserSelectedDOB(false);
+            }}
             textColor={"#297DB3"}
             bg1={"rgba(41, 125, 179, 0.15)"}
             bg2={"#fff"}
@@ -608,8 +698,6 @@ const AddClientScreen = () => {
           {currentStep === 1 ? (
             <>
               <Text style={styles.title}>Client Details</Text>
-
-              {/* Basic Details */}
               <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Basic Details</Text>
 
@@ -723,20 +811,32 @@ const AddClientScreen = () => {
                         errors.dateOfBirth &&
                         styles.errorInput,
                     ]}
-                    onPress={() => !isDataFromQR && setShowDatePicker(true)}
+                    onPress={() => {
+                      if (!isDataFromQR) {
+                        setTempDateOfBirth(form.dateOfBirth || new Date());
+                        setShowDatePicker(true);
+                      }
+                    }}
                     disabled={isDataFromQR}
                   >
                     <Text
                       style={[
                         styles.datePickerText,
                         isDataFromQR && styles.disabledText,
+                        !hasUserSelectedDOB && styles.placeholderText,
                       ]}
                     >
-                      {formatDateForDisplay(form.dateOfBirth)}
-                      <Text style={styles.ageText}>
-                        {" "}
-                        (Age: {calculateAge(form.dateOfBirth)} years)
-                      </Text>
+                      {hasUserSelectedDOB ? (
+                        <>
+                          {formatDateForDisplay(form.dateOfBirth)}
+                          <Text style={styles.ageText}>
+                            {" "}
+                            (Age: {calculateAge(form.dateOfBirth)} years)
+                          </Text>
+                        </>
+                      ) : (
+                        "Select your date of birth"
+                      )}
                     </Text>
                     <MaterialCommunityIcons
                       name="calendar"
@@ -749,16 +849,75 @@ const AddClientScreen = () => {
                   )}
                 </View>
 
-                {showDatePicker && (
+                {/* iOS Date Picker Modal */}
+                {Platform.OS === "ios" && showDatePicker && (
+                  <Modal
+                    transparent={true}
+                    animationType="slide"
+                    visible={showDatePicker}
+                    onRequestClose={cancelDateOfBirthSelection}
+                  >
+                    <TouchableWithoutFeedback
+                      onPress={cancelDateOfBirthSelection}
+                    >
+                      <View style={styles.pickerModalContainer}>
+                        <TouchableWithoutFeedback
+                          onPress={(e) => e.stopPropagation()}
+                        >
+                          <View style={styles.pickerContainer}>
+                            <View style={styles.pickerHeader}>
+                              <TouchableOpacity
+                                onPress={cancelDateOfBirthSelection}
+                              >
+                                <Text style={styles.pickerCancelText}>
+                                  Cancel
+                                </Text>
+                              </TouchableOpacity>
+                              <Text style={styles.pickerTitle}>
+                                Select Date of Birth
+                              </Text>
+                              <TouchableOpacity
+                                onPress={confirmDateOfBirthSelection}
+                              >
+                                <Text style={styles.pickerConfirmText}>
+                                  Done
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                              testID="dateTimePicker"
+                              value={tempDateOfBirth}
+                              mode="date"
+                              display="spinner"
+                              themeVariant="light"
+                              textColor="#000000"
+                              onChange={handleDateChange}
+                              maximumDate={new Date()}
+                              minimumDate={
+                                new Date(new Date().getFullYear() - 100, 0, 1)
+                              }
+                              style={styles.iosPickerStyle}
+                            />
+                          </View>
+                        </TouchableWithoutFeedback>
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </Modal>
+                )}
+
+                {/* Android Date Picker */}
+                {Platform.OS === "android" && showDatePicker && (
                   <DateTimePicker
                     testID="dateTimePicker"
                     value={form.dateOfBirth}
                     mode="date"
                     is24Hour={true}
                     display="default"
+                    themeVariant="light"
+                    textColor="#000000"
                     onChange={handleDateChange}
-                    maximumDate={new Date()} // Can't select future dates
-                    minimumDate={new Date(new Date().getFullYear() - 100, 0, 1)} // 100 years ago
+                    maximumDate={new Date()}
+                    minimumDate={new Date(new Date().getFullYear() - 100, 0, 1)}
                   />
                 )}
 
@@ -783,7 +942,6 @@ const AddClientScreen = () => {
                 </View>
               </View>
 
-              {/* Physical Attributes */}
               <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Physical Attributes</Text>
 
@@ -853,7 +1011,6 @@ const AddClientScreen = () => {
                 </View>
               </View>
 
-              {/* Lifestyle & Goals */}
               <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Lifestyle & Goals</Text>
 
@@ -945,8 +1102,6 @@ const AddClientScreen = () => {
           ) : (
             <>
               <Text style={styles.title}>Training and Batch Details</Text>
-
-              {/* Training & Batch */}
               <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Training & Batch</Text>
 
@@ -1062,6 +1217,105 @@ const AddClientScreen = () => {
                 </View>
 
                 <View style={styles.inputGroup}>
+                  <Text style={styles.label}>
+                    Fee Collection Start Date (Optional)
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.datePickerButton}
+                    onPress={() => {
+                      setTempFeeCollectionDate(
+                        form.feeCollectionStartDate || new Date()
+                      );
+                      setShowFeeCollectionDatePicker(true);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.datePickerText,
+                        !form.feeCollectionStartDate && styles.placeholderText,
+                      ]}
+                    >
+                      {form.feeCollectionStartDate
+                        ? formatDateForDisplay(form.feeCollectionStartDate)
+                        : "Select fee collection start date (Optional)"}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name="calendar"
+                      size={20}
+                      color="#666666"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* iOS Fee Collection Date Picker Modal */}
+                {Platform.OS === "ios" && showFeeCollectionDatePicker && (
+                  <Modal
+                    transparent={true}
+                    animationType="slide"
+                    visible={showFeeCollectionDatePicker}
+                    onRequestClose={cancelFeeCollectionDateSelection}
+                  >
+                    <TouchableWithoutFeedback
+                      onPress={cancelFeeCollectionDateSelection}
+                    >
+                      <View style={styles.pickerModalContainer}>
+                        <TouchableWithoutFeedback
+                          onPress={(e) => e.stopPropagation()}
+                        >
+                          <View style={styles.pickerContainer}>
+                            <View style={styles.pickerHeader}>
+                              <TouchableOpacity
+                                onPress={cancelFeeCollectionDateSelection}
+                              >
+                                <Text style={styles.pickerCancelText}>
+                                  Cancel
+                                </Text>
+                              </TouchableOpacity>
+                              <Text style={styles.pickerTitle}>
+                                Select Fee Collection Date
+                              </Text>
+                              <TouchableOpacity
+                                onPress={confirmFeeCollectionDateSelection}
+                              >
+                                <Text style={styles.pickerConfirmText}>
+                                  Done
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                              testID="feeCollectionDateTimePicker"
+                              value={tempFeeCollectionDate}
+                              mode="date"
+                              display="spinner"
+                              themeVariant="light"
+                              textColor="#000000"
+                              onChange={handleFeeCollectionDateChange}
+                              minimumDate={new Date()}
+                              style={styles.iosPickerStyle}
+                            />
+                          </View>
+                        </TouchableWithoutFeedback>
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </Modal>
+                )}
+
+                {/* Android Fee Collection Date Picker */}
+                {Platform.OS === "android" && showFeeCollectionDatePicker && (
+                  <DateTimePicker
+                    testID="feeCollectionDateTimePicker"
+                    value={form.feeCollectionStartDate || new Date()}
+                    mode="date"
+                    is24Hour={true}
+                    display="default"
+                    themeVariant="light"
+                    textColor="#000000"
+                    onChange={handleFeeCollectionDateChange}
+                    minimumDate={new Date()}
+                  />
+                )}
+
+                <View style={styles.inputGroup}>
                   <Text style={styles.label}>Admission Fees</Text>
                   <TextInput
                     style={[
@@ -1081,6 +1335,30 @@ const AddClientScreen = () => {
                   />
                   {touched.admissionFee && errors.admissionFee && (
                     <Text style={styles.errorText}>{errors.admissionFee}</Text>
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Admission Number (optional)</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      touched.admissionNumber &&
+                        errors.admissionNumber &&
+                        styles.errorInput,
+                    ]}
+                    placeholder="Enter Admission Number(Optional)"
+                    placeholderTextColor="#a0a0a0"
+                    value={form.admissionNumber}
+                    onChangeText={(value) =>
+                      handleInputChange("admissionNumber", value)
+                    }
+                    onBlur={() => handleBlur("admissionNumber")}
+                  />
+                  {touched.admissionNumber && errors.admissionNumber && (
+                    <Text style={styles.errorText}>
+                      {errors.admissionNumber}
+                    </Text>
                   )}
                 </View>
 
@@ -1253,6 +1531,15 @@ const AddClientScreen = () => {
               </Text>
             </View>
 
+            {form.feeCollectionStartDate && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Fee Collection Start:</Text>
+                <Text style={styles.detailValue}>
+                  {formatDateForDisplay(form.feeCollectionStartDate)}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Payment Method:</Text>
               <Text style={styles.detailValue}>
@@ -1361,6 +1648,9 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: "#999999",
+  },
+  placeholderText: {
+    color: "#a0a0a0",
   },
   errorInput: {
     borderColor: "#FF3B30",
@@ -1571,6 +1861,44 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "600",
   },
+  // iOS Picker Modal Styles (added from buddy page)
+  pickerModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  pickerConfirmText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  iosPickerStyle: {
+    height: 200,
+    width: "100%",
+  },
 });
 
 const pickerSelectStyles = StyleSheet.create({
@@ -1578,10 +1906,10 @@ const pickerSelectStyles = StyleSheet.create({
     fontSize: 14,
     paddingVertical: 15,
     paddingHorizontal: 15,
-    borderWidth: 0, // Remove border since container already has it
+    borderWidth: 0,
     borderRadius: 8,
     color: "#2C3E50",
-    paddingRight: 40, // Ensure text doesn't overlap with icon
+    paddingRight: 40,
     backgroundColor: "transparent",
     minHeight: 45,
   },
@@ -1589,7 +1917,7 @@ const pickerSelectStyles = StyleSheet.create({
     fontSize: 14,
     paddingHorizontal: 15,
     paddingVertical: 12,
-    borderWidth: 0, // Remove border since container already has it
+    borderWidth: 0,
     borderRadius: 8,
     color: "#2C3E50",
     paddingRight: 40,

@@ -47,8 +47,27 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
   const textInputRef = useRef(null);
 
   const hasContent = text.trim() !== "" || mediaItems.length > 0;
-
   const isMaxMediaReached = mediaItems.length >= MAX_MEDIA_ITEMS;
+
+  // Add audio configuration function
+  const configureAudioMode = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+    } catch (error) {
+      console.error("Failed to configure audio mode:", error);
+    }
+  };
+
+  // Configure audio mode when component mounts
+  useEffect(() => {
+    configureAudioMode();
+  }, []);
 
   const isMediaUnique = useCallback(
     (newItem) => {
@@ -82,7 +101,7 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
         showToast({
           type: "error",
           title: "Error",
-          desc: "Permission needed', 'Sorry, we need camera roll permissions to make this work!",
+          desc: "Sorry, we need camera roll permissions to make this work!",
         });
         return;
       }
@@ -97,16 +116,13 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All, // Use specific enum
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsMultipleSelection: true,
-        quality: 0.8, // Slightly higher quality since no editing
+        quality: 0.8,
         selectionLimit: MAX_MEDIA_ITEMS - mediaItems.length,
-        // Remove allowsEditing and aspect to prevent iOS cropping
-        allowsEditing: false, // This prevents the cropping screen
-        // aspect: [4, 3], // Remove this line
-        // Additional options for better experience
-        exif: false, // Don't include EXIF data
-        base64: false, // Don't include base64
+        allowsEditing: false,
+        exif: false,
+        base64: false,
       });
 
       if (!result.canceled) {
@@ -174,9 +190,8 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: false, // Remove editing/cropping
-        // aspect: [4, 3], // Remove aspect ratio
-        quality: 0.8, // Good quality without editing
+        allowsEditing: false,
+        quality: 0.8,
         exif: false,
         base64: false,
       });
@@ -214,6 +229,7 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
         }
       }
     } catch (error) {
+      console.error("Camera photo error:", error);
       showToast({
         type: "error",
         title: "Error",
@@ -225,10 +241,9 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
   const removeMediaItem = useCallback(
     (indexToRemove) => {
       if (indexToRemove < 0 || indexToRemove >= mediaItems.length) {
-        showToast({
-          type: "error",
-          title: "Invalid index for media removal",
-          desc: "Invalid index for media removal",
+        console.error("Invalid index for media removal", {
+          index: indexToRemove,
+          mediaItemsLength: mediaItems.length,
         });
         return;
       }
@@ -236,10 +251,9 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
       const removedItem = mediaItems[indexToRemove];
 
       if (!removedItem) {
-        showToast({
-          type: "error",
-          title: "Media item at specified index is undefined",
-          desc: "Media item at specified index is undefined",
+        console.error("Media item at specified index is undefined", {
+          index: indexToRemove,
+          mediaItems: mediaItems,
         });
         return;
       }
@@ -258,18 +272,36 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
     [mediaItems]
   );
 
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+
   const startRecording = async () => {
     try {
+      // Configure audio mode first
+      await configureAudioMode();
+
+      // Request permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== "granted") {
         showToast({
           type: "info",
-          title: "Permisiion needed",
+          title: "Permission needed",
           desc: "Sorry, we need audio recording permissions!",
         });
         return;
       }
 
+      // Give iOS time to finalize AVAudioSession state
+      await wait(500);
+
+      // Attempt recording (with auto-retry)
+      await attemptRecordingWithRetry();
+    } catch (err) {
+      // No toast for audio errors as requested
+    }
+  };
+
+  const attemptRecordingWithRetry = async () => {
+    try {
       const recording = new Audio.Recording();
       await recording.prepareToRecordAsync(
         Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
@@ -284,11 +316,25 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
         setRecordingTimer((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      showToast({
-        type: "error",
-        title: "Recording Error",
-        desc: "Could not start audio recording",
-      });
+      await wait(500);
+
+      try {
+        const recording = new Audio.Recording();
+        await recording.prepareToRecordAsync(
+          Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+        );
+        await recording.startAsync();
+
+        audioRecordingRef.current = recording;
+        setAudioRecording(recording);
+        setRecordingTimer(0);
+
+        timerIntervalRef.current = setInterval(() => {
+          setRecordingTimer((prev) => prev + 1);
+        }, 1000);
+      } catch (retryErr) {
+        // No toast for audio errors as requested
+      }
     }
   };
 
@@ -315,11 +361,8 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
       audioRecordingRef.current = null;
       setRecordingTimer(0);
     } catch (err) {
-      showToast({
-        type: "error",
-        title: "Recording Error",
-        desc: "Could not stop audio recording",
-      });
+      console.error("Failed to stop recording", err);
+      // No toast for audio errors as requested
     }
   };
 
@@ -338,10 +381,10 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
 
   const renderMediaPreview = ({ item, index, drag, isActive }) => {
     if (!item) {
-      showToast({
-        type: "error",
-        title: "Invalid media item",
-        desc: "Attempting to render undefined media item",
+      console.error("Attempting to render undefined media item", {
+        index,
+        mediaItems: mediaItems,
+        fullItemList: JSON.stringify(mediaItems, null, 2),
       });
       return null;
     }
@@ -413,7 +456,7 @@ const MediaInputComponent = ({ onMediaSubmit }) => {
             style={[styles.textInputWrapper, { height: inputHeight }]}
           >
             <TextInput
-              style={[styles.textInput]}
+              style={styles.textInput}
               placeholder="Share your thoughts..."
               placeholderTextColor="#999"
               multiline
@@ -526,7 +569,6 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: "#f9f9f9",
     borderRadius: 10,
-    // padding: 10,
   },
   mediaPreviewContainer: {
     marginBottom: 10,
@@ -536,7 +578,6 @@ const styles = StyleSheet.create({
   },
   inputSection: {
     flexDirection: "column",
-    // backgroundColor: 'pink',
     backgroundColor: "white",
     shadowColor: "#000",
     shadowOffset: { width: 0.5, height: 0.5 },
@@ -552,15 +593,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   textInputWrapper: {
-    // flex: 1,
-    // flexDirection: 'row',
-    // backgroundColor: '#fff',
-    // borderRadius: 20,
-    // paddingHorizontal: 15,
-    // paddingVertical: 10,
-    // alignItems: 'center',
-    // borderWidth: 1,
-    // borderColor: '#ddd',
     flex: 1,
     flexDirection: "row",
     backgroundColor: "rgba(29, 160, 242, 0.04)",
@@ -591,7 +623,6 @@ const styles = StyleSheet.create({
   },
   voiceRecordButton: {
     alignItems: "center",
-    // marginBottom: 10,
   },
   recordingContainer: {
     alignItems: "center",
@@ -608,11 +639,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#1DA1F2",
-    // backgroundColor: 'rgba(29, 160, 242, 0.04)',
     backgroundColor: "rgba(29, 160, 242, 0.04)",
   },
   disabledSubmitButton: {
-    // backgroundColor: '#EFEFEF',
     opacity: 0.5,
     borderRadius: 25,
     width: 50,

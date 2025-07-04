@@ -20,12 +20,12 @@ const SearchBarWithFilterButton = forwardRef(
       selectedMonth,
       onClearText,
       selectedYear,
+      showFilter = true, 
     },
     ref
   ) => {
     const inputRef = useRef(null);
   
-  // Memoize the input element to prevent re-creation on every render
   const inputElement = useMemo(() => (
     <TextInput
       ref={inputRef}
@@ -41,7 +41,6 @@ const SearchBarWithFilterButton = forwardRef(
     />
   ), [value, inputStyle, placeholder, onChangeText]);
 
-    // Expose the inputRef to parent components
     useImperativeHandle(ref, () => ({
       focus: () => {
         inputRef.current?.focus();
@@ -61,7 +60,6 @@ const SearchBarWithFilterButton = forwardRef(
       if (onChangeText) {
         onChangeText('');
       }
-      // Focus input after clearing text
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -72,7 +70,10 @@ const SearchBarWithFilterButton = forwardRef(
     return (
       <View style={[styles.container, style]}>
         <View style={styles.searchContainer}>
-          <View style={styles.inputContainer}>
+          <View style={[
+            styles.inputContainer, 
+            !showFilter && styles.inputContainerNoFilter
+          ]}>
             <Icon
               name="search"
               size={18}
@@ -91,28 +92,30 @@ const SearchBarWithFilterButton = forwardRef(
             )}
           </View>
 
-          <View style={styles.filterButtonContainer}>
-            {selectedMonth ? (
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={onFilterPress}
-              >
-                <Text style={styles.selectedFilterText} numberOfLines={1}>
-                  {selectedMonth.slice(0, 3)}
-                </Text>
-                <Text style={styles.selectedFilterText2} numberOfLines={1}>
-                  {selectedYear}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={onFilterPress}
-              >
-                <Icon name="calendar" size={18} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+          {showFilter && (
+            <View style={styles.filterButtonContainer}>
+              {selectedMonth ? (
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={onFilterPress}
+                >
+                  <Text style={styles.selectedFilterText} numberOfLines={1}>
+                    {selectedMonth.slice(0, 3)}
+                  </Text>
+                  <Text style={styles.selectedFilterText2} numberOfLines={1}>
+                    {selectedYear}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={onFilterPress}
+                >
+                  <Icon name="calendar" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       </View>
     );
@@ -146,6 +149,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     flex: 1,
     marginRight: 8,
+  },
+  inputContainerNoFilter: {
+    marginRight: 0, // Remove margin when no filter button
   },
   searchIcon: {
     marginRight: 8,

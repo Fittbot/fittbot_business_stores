@@ -1,6 +1,6 @@
-import { AntDesign } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import React, { useState, useEffect } from 'react';
+import { AntDesign } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Dimensions,
@@ -12,14 +12,14 @@ import {
   View,
   ActivityIndicator,
   Image,
-} from 'react-native';
+} from "react-native";
 import DraggableFlatList, {
   ScaleDecorator,
-} from 'react-native-draggable-flatlist';
-import ImagePreviewBox from './ImagePreviewBox';
-import { showToast } from '../../utils/Toaster';
+} from "react-native-draggable-flatlist";
+import ImagePreviewBox from "./ImagePreviewBox";
+import { showToast } from "../../utils/Toaster";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const TARGET_ASPECT_RATIO = 3 / 4;
@@ -32,6 +32,7 @@ const ImageUploadModal = ({
   setImages,
   maxImages = 6,
   postTheGymBrochures,
+  onDeleteImage,
 }) => {
   const [localImages, setLocalImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -60,15 +61,15 @@ const ImageUploadModal = ({
   const validateImage = async (imageUri, fileSize) => {
     if (fileSize > MAX_FILE_SIZE) {
       showToast({
-        type: 'error',
-        title: 'File Too Large',
-        desc: 'Image size should be less than 2MB. Please select a smaller image.',
+        type: "error",
+        title: "File Too Large",
+        desc: "Image size should be less than 2MB. Please select a smaller image.",
       });
       return false;
     }
 
     return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
+      if (Platform.OS === "web") {
         resolve(true);
         return;
       }
@@ -81,9 +82,9 @@ const ImageUploadModal = ({
 
           if (ratioDeviation > RATIO_TOLERANCE) {
             showToast({
-              type: 'error',
-              title: 'Incorrect Aspect Ratio',
-              desc: 'Please select an image with a 3:4 aspect ratio.',
+              type: "error",
+              title: "Incorrect Aspect Ratio",
+              desc: "Please select an image with a 3:4 aspect ratio.",
             });
             resolve(false);
           } else {
@@ -92,8 +93,8 @@ const ImageUploadModal = ({
         },
         (error) => {
           showToast({
-            type: 'error',
-            title: error?.message || 'Failed to verify image dimensions.',
+            type: "error",
+            title: error?.message || "Failed to verify image dimensions.",
           });
           resolve(false);
         }
@@ -105,20 +106,20 @@ const ImageUploadModal = ({
     try {
       if (localImages.filter((img) => !img.isPlaceholder).length >= maxImages) {
         showToast({
-          type: 'error',
+          type: "error",
           title: `You can only add up to ${maxImages} images.`,
         });
         return;
       }
 
-      if (Platform.OS !== 'web') {
+      if (Platform.OS !== "web") {
         const { status } =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
+        if (status !== "granted") {
           showToast({
-            type: 'error',
-            title: 'Permission denied',
-            desc: 'We need camera roll permissions to upload images',
+            type: "error",
+            title: "Permission denied",
+            desc: "We need camera roll permissions to upload images",
           });
           return;
         }
@@ -161,8 +162,8 @@ const ImageUploadModal = ({
       }
     } catch (error) {
       showToast({
-        type: 'error',
-        title: error?.message || 'Failed to pick image',
+        type: "error",
+        title: error?.message || "Failed to pick image",
       });
     }
   };
@@ -175,20 +176,20 @@ const ImageUploadModal = ({
         localImages[index].isPlaceholder
       ) {
         showToast({
-          type: 'error',
-          title: 'Invalid index for replacement',
+          type: "error",
+          title: "Invalid index for replacement",
         });
         return;
       }
 
-      if (Platform.OS !== 'web') {
+      if (Platform.OS !== "web") {
         const { status } =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
+        if (status !== "granted") {
           showToast({
-            type: 'error',
-            title: 'Permission denied',
-            desc: 'We need camera roll permissions to upload images',
+            type: "error",
+            title: "Permission denied",
+            desc: "We need camera roll permissions to upload images",
           });
           return;
         }
@@ -223,13 +224,13 @@ const ImageUploadModal = ({
       }
     } catch (error) {
       showToast({
-        type: 'error',
-        title: error?.message || 'Failed to replace image',
+        type: "error",
+        title: error?.message || "Failed to replace image",
       });
     }
   };
 
-  const removeImage = (index) => {
+  const removeImage = async (index) => {
     if (
       index < 0 ||
       index >= localImages.length ||
@@ -238,17 +239,58 @@ const ImageUploadModal = ({
       return;
     }
 
-    setLocalImages((prevImages) => {
-      const newImages = [...prevImages];
-      newImages.splice(index, 1);
+    const imageToRemove = localImages[index];
 
-      newImages.push({
-        id: `placeholder-${Date.now()}-${Math.random()}`,
-        isPlaceholder: true,
+    // Check if this is a server image that needs API deletion
+    if (
+      (imageToRemove.serverPath || imageToRemove.brochureId) &&
+      onDeleteImage
+    ) {
+      // Find the original index in the main images array
+      const originalIndex = images.findIndex(
+        (img) =>
+          img.id === imageToRemove.id ||
+          img.brochureId === imageToRemove.brochureId ||
+          (img.source?.uri === imageToRemove.source?.uri &&
+            imageToRemove.serverPath)
+      );
+
+      if (originalIndex !== -1) {
+        // Call the delete function from parent component
+        await onDeleteImage(originalIndex);
+
+        // Update local images after successful deletion
+        setLocalImages((prevImages) => {
+          const newImages = [...prevImages];
+          newImages.splice(index, 1);
+
+          newImages.push({
+            id: `placeholder-${Date.now()}-${Math.random()}`,
+            isPlaceholder: true,
+          });
+
+          return newImages;
+        });
+      } else {
+        showToast({
+          type: "error",
+          title: "Could not find image to delete",
+        });
+      }
+    } else {
+      // This is a local image, just remove from state
+      setLocalImages((prevImages) => {
+        const newImages = [...prevImages];
+        newImages.splice(index, 1);
+
+        newImages.push({
+          id: `placeholder-${Date.now()}-${Math.random()}`,
+          isPlaceholder: true,
+        });
+
+        return newImages;
       });
-
-      return newImages;
-    });
+    }
 
     if (selectedForSwap === index) {
       setSelectedForSwap(null);
@@ -291,8 +333,8 @@ const ImageUploadModal = ({
       onClose();
     } catch (error) {
       showToast({
-        type: 'error',
-        title: error?.message || 'Failed to save changes. Please try again.',
+        type: "error",
+        title: error?.message || "Failed to save changes. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -424,49 +466,49 @@ const ImageUploadModal = ({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    width: '90%',
-    maxHeight: '85%',
-    backgroundColor: '#FFF',
+    width: "90%",
+    maxHeight: "85%",
+    backgroundColor: "#FFF",
     borderRadius: 10,
     padding: 20,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 10,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   instructions: {
     marginBottom: 15,
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
+    color: "#666",
+    fontStyle: "italic",
   },
   swapInstructions: {
     fontSize: 14,
-    color: '#007AFF',
+    color: "#007AFF",
     marginTop: 5,
   },
   requirementsText: {
     fontSize: 12,
-    color: '#888',
+    color: "#888",
     marginTop: 5,
   },
   closeButton: {
@@ -485,32 +527,32 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     transform: [{ scale: 1.05 }],
     zIndex: 999,
-    backgroundColor: 'rgba(255, 87, 87, 0.1)',
+    backgroundColor: "rgba(255, 87, 87, 0.1)",
     borderRadius: 5,
   },
   selectedForSwap: {
     borderWidth: 2,
-    borderColor: '#FF5757',
+    borderColor: "#FF5757",
     borderRadius: 5,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginTop: 20,
     minWidth: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   disabledButton: {
-    backgroundColor: '#007bffb8',
+    backgroundColor: "#007bffb8",
     opacity: 0.7,
   },
   saveButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
     fontSize: 16,
   },
 });

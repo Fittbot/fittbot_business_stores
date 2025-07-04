@@ -55,7 +55,6 @@ import useBackHandler from "../../../hooks/useBackHandler";
 const { width, height } = Dimensions.get("window");
 const BOTTOM_NAV_HEIGHT = 80;
 
-// GST type options
 const gstTypeOptions = [
   { label: "Inclusive", value: "inclusive" },
   { label: "Exclusive", value: "exclusive" },
@@ -115,7 +114,6 @@ const ClientListPage = () => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [paymentReferenceNumber, setPaymentReferenceNumber] = useState("");
 
-  // New GST fields
   const [gstType, setGstType] = useState("no_gst");
   const [gstPercentage, setGstPercentage] = useState("");
 
@@ -183,7 +181,6 @@ const ClientListPage = () => {
       }
       const response = await getClientsAPI(gymId);
       if (response?.status === 200) {
-        // Store gym data from response
         if (response?.gym_data) {
           setGymData(response.gym_data);
           setGymName(response.gym_data.name);
@@ -214,6 +211,8 @@ const ClientListPage = () => {
           height: client.height || "N/A",
           weight: client.weight || "N/A",
           is_old_client: client.is_old_client || false,
+          admission_number: client.admission_number || "",
+          data_sharing: client.data_sharing || false,
         }));
 
         setClients(data);
@@ -354,7 +353,15 @@ const ClientListPage = () => {
           (client) =>
             (client.name &&
               client.name.toLowerCase().includes(query.toLowerCase())) ||
-            (client.contact && client.contact.includes(query))
+            (client.contact && client.contact.includes(query)) ||
+            (client.admission_number &&
+              client.admission_number
+                .toLowerCase()
+                .includes(query.toLowerCase())) ||
+            (client.gym_client_id &&
+              client.gym_client_id
+                .toLowerCase()
+                .includes(query.toLocaleLowerCase()))
         );
       }
 
@@ -548,11 +555,26 @@ const ClientListPage = () => {
             />
           </View>
           <View style={styles.clientInfo}>
-            <Text style={styles.clientName}>{item.name}</Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
+            >
+              <Text style={styles.clientName}>{item.name}</Text>
+              {item.data_sharing && (
+                <Image
+                  source={require("../../../assets/images/data_sharing.png")}
+                  resizeMode="contain"
+                  style={{ width: 20 }}
+                />
+              )}
+            </View>
             <View style={styles.clientDetails}>
-              <View style={styles.detailItem}>
+              <View style={[styles.detailItem, { width: 125 }]}>
                 <FontAwesome5 name="id-card" size={12} color="#666" />
-                <Text style={styles.detailText}>{item.gym_client_id}</Text>
+                <Text style={styles.detailText}>
+                  {item.admission_number
+                    ? item.admission_number
+                    : item.gym_client_id}
+                </Text>
               </View>
               <View style={styles.detailItem}>
                 <FontAwesome name="phone" size={12} color="#666" />
@@ -738,10 +760,6 @@ const ClientListPage = () => {
             {EmptyMessage}
           </View>
         }
-        // onScroll={Animated.event(
-        //   [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-        //   { useNativeDriver: false }
-        // )}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -900,7 +918,6 @@ const ClientListPage = () => {
             onDownload={() => {}}
             gymData={gymData}
             invoice={{
-              // id: 'INV-2025-001',
               name: selectedClient?.name || "Client Name",
               address: "228 Park Avenue, New York, USA",
               contact: selectedClient?.contact || "+1 123 456 7890",
@@ -944,9 +961,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
     paddingTop: 170,
     paddingBottom: 0,
-  },
-  content: {
-    // paddingHorizontal: 16,
   },
   header: {
     fontSize: 24,

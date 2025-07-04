@@ -20,31 +20,29 @@ const UserItem2 = ({
   showInvoice,
   handleOpenAboutToExpireModal,
   handleUpdateDiscount,
-  selectedItems,
   toggleItemSelection,
   emailSent,
   title,
+  isSelected, 
 }) => {
   const [editableDiscount, setEditableDiscount] = useState("");
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [isEditingDiscount, setIsEditingDiscount] = useState(false);
 
-  // Calculate days until due date
   const dueDate = new Date(item?.due_date);
   const today = new Date();
   const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
 
-  // Color coding based on due date proximity
   const getDueDateColor = () => {
-    if (daysUntilDue < 0) return "#FF3B30"; // Overdue
-    if (daysUntilDue <= 3) return "#FF9500"; // Due soon
-    return "#34C759"; // Not due soon
+    if (daysUntilDue < 0) return "#FF3B30"; 
+    if (daysUntilDue <= 3) return "#FF9500"; 
+    return "#34C759"; 
   };
 
   const getDueDateBackground = () => {
-    if (daysUntilDue < 0) return "#FFE5E5"; // Overdue
-    if (daysUntilDue <= 3) return "#FFF5E5"; // Due soon
-    return "#E5F9ED"; // Not due soon
+    if (daysUntilDue < 0) return "#FFE5E5"; 
+    if (daysUntilDue <= 3) return "#FFF5E5"; 
+    return "#E5F9ED"; 
   };
 
   const getDueDateText = () => {
@@ -55,11 +53,6 @@ const UserItem2 = ({
   };
 
   const backgroundColor = index % 2 === 0 ? "#f9fafc" : "#ffffff";
-  const isSelected =
-    selectedItems &&
-    selectedItems.includes(
-      title === "Receipt" ? item.receipt_id : item.expiry_id
-    );
 
   const currentDiscount =
     item.discount !== undefined && item.discount !== null
@@ -78,7 +71,6 @@ const UserItem2 = ({
         item.mail_send && styles.emailSentCard,
       ]}
     >
-      {/* Selection checkbox */}
       <TouchableOpacity
         style={styles.checkboxContainer}
         onPress={() => toggleItemSelection(item)}
@@ -87,7 +79,7 @@ const UserItem2 = ({
         <View
           style={[
             styles.checkbox,
-            isSelected && styles.checkboxSelected,
+            isSelected && styles.checkboxSelected, 
             (item.mail_send || item.mail_status) && styles.checkboxDisabled,
           ]}
         >
@@ -98,9 +90,7 @@ const UserItem2 = ({
         </View>
       </TouchableOpacity>
 
-      {/* Main info section */}
       <View style={styles.infoSection}>
-        {/* Client name */}
         <View
           style={[
             styles.userName,
@@ -113,17 +103,13 @@ const UserItem2 = ({
           </TouchableOpacity>
         </View>
 
-        {/* Info row */}
         <View style={styles.infoRow}>
-          {/* Fee badge */}
           <View style={[styles.feeBadge, { backgroundColor: "#787878d5" }]}>
-            {/* <MaterialIcons name="attach-money" size={14} color="#ffffff" /> */}
             <Text style={[styles.feeText, { color: "#ffffff" }]}>
               ₹{item.fees}
             </Text>
           </View>
 
-          {/* Due date badge */}
           <View
             style={[
               styles.dueDateBadge,
@@ -139,19 +125,13 @@ const UserItem2 = ({
           </View>
         </View>
       </View>
-      {/* Call button */}
-      {/* <TouchableOpacity style={styles.callButton} onPress={handleCall}>
-        <Icon name="phone" size={14} color="#fff" /> */}
-      {/* <Text style={styles.callButtonText}>Call</Text> */}
-      {/* </TouchableOpacity> */}
-      {/* 3-dot menu button */}
+
       <TouchableOpacity
         style={styles.menuButton}
         onPress={() => setShowActionsModal(true)}
       >
         <Icon name="more-vertical" size={20} color="#6c757d" />
       </TouchableOpacity>
-      {/* Actions Modal */}
 
       <Modal
         transparent={true}
@@ -179,13 +159,8 @@ const UserItem2 = ({
               }}
             >
               <Icon name="file-text" size={20} color="#10A0F6" />
-              <Text style={styles.modalOptionText}>View {title}</Text>
+              <Text style={styles.modalOptionText}>View Invoice/Estimate</Text>
             </TouchableOpacity>
-
-            {/* <TouchableOpacity style={styles.modalOption}>
-              <Icon name="share-2" size={20} color="#10A0F6" />
-              <Text style={styles.modalOptionText}>Share {title}</Text>
-            </TouchableOpacity> */}
 
             {title !== "Receipt" && (
               <TouchableOpacity
@@ -250,7 +225,6 @@ const UserItem2 = ({
           </View>
         </TouchableOpacity>
       </Modal>
-      {/* Edit Discount Modal */}
 
       <Modal
         transparent={true}
@@ -272,10 +246,10 @@ const UserItem2 = ({
                 keyboardType="numeric"
                 value={editableDiscount}
                 onChangeText={(text) => setEditableDiscount(text)}
-                placeholder="Enter discount percentage"
+                placeholder="Enter discount amount"
                 autoFocus={true}
               />
-              <Text style={styles.percentSign}>%</Text>
+              {/* <Text style={styles.percentSign}></Text> */}
             </View>
 
             <View style={styles.discountButtonsRow}>
@@ -318,7 +292,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
-    // elevation: 1,
     borderWidth: 1,
     borderColor: "#eaeef2",
   },
@@ -387,7 +360,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     marginLeft: 8,
-    // marginRight: 8,
   },
   callButtonText: {
     fontSize: 12,
@@ -417,7 +389,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    // elevation: 5,
   },
   modalTitle: {
     fontSize: 18,
@@ -489,7 +460,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    // elevation: 5,
   },
   discountInputContainer: {
     flexDirection: "row",

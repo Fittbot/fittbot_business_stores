@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   ScrollView,
   View,
@@ -9,6 +9,10 @@ import {
   StyleSheet,
   Image,
   Dimensions,
+  StatusBar,
+  RefreshControl,
+  ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,7 +27,7 @@ import Footer from "../ui/Home/footer";
 import MembershipDashboard from "./MembershipDashboard";
 import useBackHandler from "../UseBackHandler ";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 const CircularProgress = ({ percentage }) => {
   const radius = 40;
@@ -119,11 +123,6 @@ const AttendanceCard = ({ attendanceData, toggleAttendanceModal }) => {
                 {attendanceData?.expected || 0}
               </Text>
             </View>
-            {/* <View>
-              <Text style={styles.comparisonText}>
-                "12% higher than yesterday!"
-              </Text>
-            </View> */}
           </View>
         </View>
         <View style={styles.attendanceRightSection}>
@@ -137,6 +136,7 @@ const AttendanceCard = ({ attendanceData, toggleAttendanceModal }) => {
     </TouchableOpacity>
   );
 };
+
 const AttendanceSection = ({ attendanceData, toggleAttendanceModal }) => {
   const router = useRouter();
   return (
@@ -148,10 +148,7 @@ const AttendanceSection = ({ attendanceData, toggleAttendanceModal }) => {
             onPress={() => router.push("/owner/clientform")}
           >
             <Text style={styles.noDataText}>
-              Please{" "}
-              <Link style={styles.noClientLink} href="/owner/clientform">
-                <Text>Add Clients</Text>
-              </Link>{" "}
+              Please <Text style={styles.noClientLink}>Add Clients </Text>
               to view attendance
             </Text>
           </TouchableOpacity>
@@ -166,52 +163,206 @@ const AttendanceSection = ({ attendanceData, toggleAttendanceModal }) => {
   );
 };
 
-const AttendanceModal = ({ isVisible, toggleAttendanceModal, names = [] }) => (
-  <Modal
-    visible={isVisible}
-    animationType="fade"
-    transparent
-    onRequestClose={toggleAttendanceModal}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>Attendance List</Text>
+const AttendanceModal = ({
+  isVisible,
+  toggleAttendanceModal,
+  names = [],
+  onLoadMore,
+  hasMoreData = false,
+  isLoading = false,
+  onRefresh,
+  isRefreshing = false,
+}) => {
+  const [page, setPage] = useState(1);
 
-        <View style={styles.headerRow}>
-          <Text style={[styles.headerText, { flex: 2 }]}>Name</Text>
-          <Text style={[styles.headerText, { flex: 1 }]}>In</Text>
-          <Text style={[styles.headerText, { flex: 1 }]}>Out</Text>
-        </View>
+  const handleLoadMore = useCallback(() => {
+    if (hasMoreData && !isLoading && onLoadMore) {
+      setPage((prevPage) => prevPage + 1);
+      onLoadMore(page + 1);
+    }
+  }, [hasMoreData, isLoading, onLoadMore, page]);
 
-        <FlatList
-          data={names}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.clientRow}>
-              <View style={styles.nameSection}>
-                <View style={styles.greenDot} />
-                <Text style={styles.clientName} numberOfLines={1}>
-                  {item.name || "N/A"}
+  const handleRefresh = useCallback(() => {
+    if (onRefresh) {
+      setPage(1);
+      onRefresh();
+    }
+  }, [onRefresh]);
+
+  const formatTime = (timeString) => {
+    if (!timeString || timeString === "N/A") return timeString;
+
+    try {
+      const [hours, minutes] = timeString.split(":");
+      const hour24 = parseInt(hours);
+      const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      const ampm = hour24 >= 12 ? "PM" : "AM";
+      return `${hour12}:${minutes} ${ampm}`;
+    } catch (error) {
+      return timeString;
+    }
+  };
+
+  const renderAttendanceItem = ({ item, index }) => (
+    <View style={styles.modernAttendanceItem}>
+      <View style={styles.modernProfileContainer}>
+        <View style={styles.modernAvatarWrapper}>
+          <LinearGradient
+            colors={["#e5383b", "#7b2cbf"]}
+            style={styles.modernAvatarGradient}
+          >
+            {item.profile_pic ? (
+              <Image
+                source={{ uri: item.profile_pic }}
+                style={styles.modernAvatar}
+              />
+            ) : (
+              <View style={styles.modernAvatarDefault}>
+                <Text style={styles.modernAvatarText}>
+                  {item.name ? item.name.charAt(0).toUpperCase() : "U"}
                 </Text>
               </View>
-              <Text style={styles.timeText}>{item.in_time || "N/A"}</Text>
-              <Text style={styles.timeText}>{item.out_time || "N/A"}</Text>
-            </View>
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-        />
+            )}
+          </LinearGradient>
+        </View>
+        <View style={styles.modernNameSection}>
+          <Text style={styles.modernMemberName} numberOfLines={1}>
+            {item.name || "N/A"}
+          </Text>
+        </View>
+      </View>
 
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={toggleAttendanceModal}
-        >
-          <Text style={styles.closeButtonText}>Close</Text>
-        </TouchableOpacity>
+      <View style={styles.modernTimeContainer}>
+        <View style={styles.modernTimeCard}>
+          <View style={styles.modernTimeHeader}>
+            <View
+              style={[styles.modernStatusDot, { backgroundColor: "#10B981" }]}
+            />
+            <Text style={styles.modernTimeTitle}>Entry</Text>
+          </View>
+          <Text style={styles.modernTimeValue}>
+            {formatTime(item.in_time) || "N/A"}
+          </Text>
+        </View>
+
+        <View style={styles.modernTimeCard}>
+          <View style={styles.modernTimeHeader}>
+            <View
+              style={[
+                styles.modernStatusDot,
+                { backgroundColor: item.out_time ? "#EF4444" : "#94A3B8" },
+              ]}
+            />
+            <Text style={styles.modernTimeTitle}>Exit</Text>
+          </View>
+          <Text
+            style={[
+              styles.modernTimeValue,
+              !item.out_time && styles.modernPendingText,
+            ]}
+          >
+            {item.out_time ? formatTime(item.out_time) : "Pending"}
+          </Text>
+        </View>
       </View>
     </View>
-  </Modal>
-);
+  );
+
+  const renderFooter = () => {
+    if (!isLoading) return null;
+    return (
+      <View style={styles.modernFooterLoader}>
+        <ActivityIndicator size="small" color="#667eea" />
+        <Text style={styles.modernLoadingText}>Loading more...</Text>
+      </View>
+    );
+  };
+
+  const renderEmpty = () => (
+    <View style={styles.modernEmptyState}>
+      <View style={styles.modernEmptyIcon}>
+        <Text style={styles.modernEmptyIconText}>📊</Text>
+      </View>
+      <Text style={styles.modernEmptyTitle}>No Attendance Today</Text>
+      <Text style={styles.modernEmptySubtitle}>
+        Members will appear here once they check in
+      </Text>
+    </View>
+  );
+
+  return (
+    <Modal
+      visible={isVisible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={toggleAttendanceModal}
+      statusBarTranslucent
+    >
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle="light-content"
+        translucent
+      />
+      <LinearGradient
+        colors={["#7b2cbf", "#e5383b"].reverse()}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.modernHeader}
+      >
+        <View style={styles.modernHeaderContent}>
+          <TouchableOpacity
+            style={styles.modernBackButton}
+            onPress={toggleAttendanceModal}
+          >
+            <Text style={styles.modernBackIcon}>←</Text>
+          </TouchableOpacity>
+
+          <View style={styles.modernHeaderInfo}>
+            <Text style={styles.modernHeaderTitle}>Today's Attendance</Text>
+            <View style={styles.modernStatsRow}>
+              <View style={styles.modernStatBadge}>
+                <Text style={styles.modernStatNumber}>{names.length}</Text>
+                <Text style={styles.modernStatLabel}>Present</Text>
+              </View>
+              <View style={styles.modernStatBadge}>
+                <Text style={styles.modernStatNumber}>
+                  {names.filter((item) => item.out_time).length}
+                </Text>
+                <Text style={styles.modernStatLabel}>Checked Out</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <View style={styles.modernContent}>
+        <FlatList
+          data={names}
+          keyExtractor={(item, index) => `${item.id || index}-${index}`}
+          renderItem={renderAttendanceItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.modernList,
+            names.length === 0 && styles.modernEmptyList,
+          ]}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmpty}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={["#667eea", "#764ba2"]}
+              tintColor="#667eea"
+            />
+          }
+          ItemSeparatorComponent={() => <View style={styles.modernSeparator} />}
+        />
+      </View>
+    </Modal>
+  );
+};
 
 const StatCard = ({ title, value, description, icon, color }) => {
   const colorArray = color || ["#8A2BE2", "#FF1493"];
@@ -290,7 +441,7 @@ const StatCard = ({ title, value, description, icon, color }) => {
 };
 
 const MembershipOverview = ({ membersData }) => {
-  let memberIcon, peopleIcon, enquiryIcon;
+  let memberIcon, peopleIcon, enquiryIcon, trainerIcon;
   const router = useRouter();
 
   try {
@@ -314,7 +465,7 @@ const MembershipOverview = ({ membersData }) => {
   try {
     trainerIcon = require("../../assets/images/home/TRAINER.png");
   } catch (err) {
-    console.error("Failed to load enquiry icon");
+    console.error("Failed to load trainer icon");
   }
 
   return (
@@ -398,30 +549,30 @@ const QuickLinks = ({ router }) => {
     },
     {
       id: 3,
+      title: "Receipts",
+      icon: require("../../assets/images/RECEPT 1.png"),
+      path: "/owner/paidMembersReceiptListPage",
+    },
+    {
+      id: 4,
       title: "Plans & Batches",
       icon: require("../../assets/images/ASSAIGNMENT 1.png"),
       path: "/owner/manageplans",
     },
     {
-      id: 4,
+      id: 5,
       title: "Assignments",
       icon: require("../../assets/images/ASSIGNMENT01 2.png"),
       path: "/owner/assigntrainer",
     },
     {
-      id: 5,
+      id: 6,
       title: "Brochures",
       icon: require("../../assets/images/3 peprs 2 2.png"),
       path: "/owner/gymPlans",
     },
-    ,
-    {
-      id: 6,
-      title: "Receipts",
-      icon: require("../../assets/images/RECEPT 1.png"),
-      path: "/owner/paidMembersReceiptListPage",
-    },
   ];
+
   return (
     <View>
       <LinearGradient
@@ -474,6 +625,11 @@ const OverViewTabs = ({
   aboutToExpireList,
   expiredMembersList,
   attendanceChartData,
+  onLoadMoreAttendance,
+  hasMoreAttendanceData = false,
+  isLoadingAttendance = false,
+  onRefreshAttendance,
+  isRefreshingAttendance = false,
 }) => {
   const [isAttendanceModalVisible, setIsAttendanceModalVisible] =
     useState(false);
@@ -484,22 +640,16 @@ const OverViewTabs = ({
   };
 
   const attendanceDataToUse = attendanceData || {
-    current: 80,
-    expected: 200,
-    names: Array(10)
-      .fill()
-      .map((_, i) => ({
-        name: `Member ${i + 1}`,
-        in_time: "9:00 AM",
-        out_time: "10:30 AM",
-      })),
+    current: 0,
+    expected: 0,
+    names: [],
   };
 
   const membersDataToUse = membersData || {
-    totalMembers: 240,
-    activeMembers: 100,
-    trainers: 20,
-    enquiries: 100,
+    totalMembers: 0,
+    activeMembers: 0,
+    trainers: 0,
+    enquiries: 0,
   };
 
   const invoiceDataToUse = invoiceData || { send: [], unsend: [] };
@@ -519,7 +669,12 @@ const OverViewTabs = ({
       <AttendanceModal
         isVisible={isAttendanceModalVisible}
         toggleAttendanceModal={toggleAttendanceModal}
-        names={attendanceDataToUse?.names}
+        names={attendanceDataToUse?.names || []}
+        onLoadMore={onLoadMoreAttendance}
+        hasMoreData={hasMoreAttendanceData}
+        isLoading={isLoadingAttendance}
+        onRefresh={onRefreshAttendance}
+        isRefreshing={isRefreshingAttendance}
       />
 
       <MembershipOverview
@@ -533,11 +688,6 @@ const OverViewTabs = ({
         aboutToExpireList={aboutToExpireList}
         expiredMembersList={expiredMembersList}
         attendanceChartData={attendanceChartData}
-        // expiringMembers={yourExpiringMembersData}
-        // expiredMembers={yourExpiredMembersData}
-        // trendData={yourAttendanceTrendData}
-        // onNavigateToExpiringList={() => navigate('/your-custom-path')}
-        // onNavigateToExpiredList={() => navigate('/your-custom-path')}
       />
 
       <Footer />
@@ -546,9 +696,6 @@ const OverViewTabs = ({
 };
 
 const styles = StyleSheet.create({
-  scrollViewContent: {
-    // paddingBottom: 20,
-  },
   sectionContainer: {
     paddingHorizontal: 16,
   },
@@ -572,7 +719,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-
   cardHeaderTitle: {
     fontSize: 16,
     fontWeight: "500",
@@ -673,6 +819,181 @@ const styles = StyleSheet.create({
     color: "#8A2BE2",
     fontWeight: "bold",
   },
+  fullScreenHeader: {
+    paddingTop: StatusBar.currentHeight + 10,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  backIcon: {
+    width: 20,
+    height: 20,
+    tintColor: "white",
+    transform: [{ rotate: "180deg" }],
+  },
+  headerTitleContainer: {
+    flex: 1,
+  },
+  fullScreenTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "white",
+  },
+  titleMask: {
+    justifyContent: "center",
+  },
+  attendanceCount: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.8)",
+    marginTop: 4,
+  },
+  fullScreenContent: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
+  },
+  attendanceList: {
+    padding: 16,
+  },
+  emptyList: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  attendanceListItem: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  profileSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  profileImageContainer: {
+    marginRight: 12,
+  },
+  profileImageGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    padding: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  defaultProfileContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  defaultProfileText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#8A2BE2",
+  },
+  nameContainer: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 2,
+  },
+  memberRole: {
+    fontSize: 12,
+    color: "#666",
+  },
+  timeSection: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  timeItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  timeIconContainer: {
+    marginRight: 8,
+  },
+  timeIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  timeDetails: {
+    flex: 1,
+  },
+  timeLabel: {
+    fontSize: 11,
+    color: "#666",
+    marginBottom: 2,
+  },
+  timeValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333",
+  },
+  pendingTime: {
+    color: "#999",
+    fontStyle: "italic",
+  },
+  separator: {
+    height: 12,
+  },
+  footerLoader: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#666",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyImage: {
+    width: 120,
+    height: 120,
+    opacity: 0.5,
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+
   cardRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -774,76 +1095,6 @@ const styles = StyleSheet.create({
     color: "#555",
     marginTop: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContainer: {
-    width: "90%",
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 20,
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  headerRow: {
-    flexDirection: "row",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  headerText: {
-    fontWeight: "bold",
-    color: "#555",
-  },
-  clientRow: {
-    flexDirection: "row",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    alignItems: "center",
-  },
-  nameSection: {
-    flex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  greenDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#50C878",
-    marginRight: 8,
-  },
-  clientName: {
-    flex: 1,
-  },
-  timeText: {
-    flex: 1,
-    textAlign: "center",
-  },
-  listContainer: {
-    paddingVertical: 8,
-  },
-  closeButton: {
-    backgroundColor: "#8A2BE2",
-    borderRadius: 8,
-    paddingVertical: 10,
-    marginTop: 16,
-    alignItems: "center",
-  },
-  closeButtonText: {
-    color: "white",
-    fontWeight: "bold",
-  },
   navigationIconContainer: {
     position: "absolute",
     top: 80,
@@ -870,6 +1121,230 @@ const styles = StyleSheet.create({
   navigationIcon: {
     width: 20,
     height: 20,
+  },
+  modernHeader: {
+    paddingTop: StatusBar.currentHeight + 15,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    // marginTop: 50,
+  },
+  modernHeaderContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modernBackButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    paddingBottom: Platform.OS === "ios" ? 0 : 5,
+    // elevation: 3,
+  },
+  modernBackIcon: {
+    fontSize: 18,
+    color: "white",
+    fontWeight: "600",
+  },
+  modernHeaderInfo: {
+    flex: 1,
+  },
+  modernHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+    marginBottom: 8,
+  },
+  modernStatsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modernStatBadge: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  modernStatNumber: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "white",
+  },
+  modernStatLabel: {
+    fontSize: 10,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+  },
+  modernContent: {
+    flex: 1,
+    backgroundColor: "#F1F5F9",
+  },
+  modernList: {
+    padding: 16,
+  },
+  modernEmptyList: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  modernAttendanceItem: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.8)",
+  },
+  modernProfileContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  modernAvatarWrapper: {
+    marginRight: 12,
+  },
+  modernAvatarGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    padding: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modernAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  modernAvatarDefault: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modernAvatarText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#e5383b",
+  },
+  modernNameSection: {
+    flex: 1,
+  },
+  modernMemberName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginBottom: 2,
+  },
+  modernMemberSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  modernTimeContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  modernTimeCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    minWidth: 75,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  modernTimeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 4,
+  },
+  modernStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  modernTimeTitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+    textTransform: "capitalise",
+    letterSpacing: 0.5,
+  },
+  modernTimeValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  modernPendingText: {
+    color: "#94A3B8",
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+  modernSeparator: {
+    height: 12,
+  },
+  modernFooterLoader: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 20,
+    gap: 8,
+  },
+  modernLoadingText: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  modernEmptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  modernEmptyIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: "rgba(102, 126, 234, 0.1)",
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modernEmptyIconText: {
+    fontSize: 32,
+  },
+  modernEmptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 8,
+  },
+  modernEmptySubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });
 

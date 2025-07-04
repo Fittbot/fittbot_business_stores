@@ -21,7 +21,6 @@ const PlanCard = ({ item, type, onEdit, onDelete, name }) => {
 
   return (
     <View style={styles.cardContainer}>
-      {/* Card Header */}
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>{name}</Text>
         <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
@@ -29,7 +28,6 @@ const PlanCard = ({ item, type, onEdit, onDelete, name }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Card Content */}
       {type === "plans" ? (
         <View style={styles.cardContent}>
           <View style={styles.infoRow}>
@@ -52,7 +50,9 @@ const PlanCard = ({ item, type, onEdit, onDelete, name }) => {
               <Text style={styles.infoText}>{item.amount}</Text>
             </View>
           </View>
-          <Text style={styles.description}>{item.description || ""}</Text>
+          {item.description && (
+            <Text style={styles.description}>{item.description || ""}</Text>
+          )}
         </View>
       ) : (
         <View style={styles.cardContent}>
@@ -67,7 +67,9 @@ const PlanCard = ({ item, type, onEdit, onDelete, name }) => {
               <Text style={styles.infoText}>{item.timing}</Text>
             </View>
           </View>
-          <Text style={styles.description}>{item.description || ""}</Text>
+          {item.description && (
+            <Text style={styles.description}>{item.description}</Text>
+          )}
         </View>
       )}
 
@@ -131,6 +133,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 4,
     position: "relative",
+    borderWidth: 0.5,
+    borderColor: "#ccc",
   },
   cardHeader: {
     flexDirection: "row",
@@ -186,13 +190,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    zIndex: 10,
+    zIndex: 1000000000,
     width: 120,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 7,
     paddingHorizontal: 12,
   },
   menuItemText: {

@@ -280,7 +280,6 @@ const ClientsManagement = () => {
   const [importResult, setImportResult] = useState(null);
   const [instructionModalVisible, setInstructionModalVisible] = useState(false);
 
-  // Filter state
   const [filters, setFilters] = useState({
     status: "all",
     sms: "all",
@@ -322,6 +321,9 @@ const ClientsManagement = () => {
       const matchesSearch =
         client.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.admission_number
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
         client.contact?.includes(searchQuery);
 
       return matchesSmsStatus && matchesActiveStatus && matchesSearch;
@@ -482,6 +484,7 @@ const ClientsManagement = () => {
         Location: item.data.Location || "",
         Gender: item.data.Gender || "",
         Status: item.data.Status || "",
+        AdmissionNumber: item.data.AdmissionNumber || "",
         Errors: item.errors.join(", "),
       }));
 
@@ -495,6 +498,7 @@ const ClientsManagement = () => {
         { wch: 20 },
         { wch: 10 },
         { wch: 10 },
+        { wch: 30 },
         { wch: 40 },
       ];
 
@@ -663,7 +667,17 @@ const ClientsManagement = () => {
               {item.name}
             </Text>
           </View>
+          {/* {
+            item?.AdmissionNumber && */}
+          {/* <View style={styles.detailItem}>
+          </View> */}
+          {/* } */}
           <View style={styles.detailItem}>
+            <FontAwesome name="id-card" size={12} color="#666" />
+            <Text style={styles.detailText}>
+              {item.admission_number || `ABC00${index + 1}`}
+              {"   "}
+            </Text>
             <FontAwesome name="phone" size={12} color="#666" />
             <Text style={styles.detailText}>{item.contact}</Text>
           </View>
@@ -676,6 +690,7 @@ const ClientsManagement = () => {
               width: "45",
               alignItems: "center",
               justifyContent: "center",
+              color: "#FFFFFF",
             }}
           >
             {item.status === "active" ? "Active" : "Inactive"}
@@ -686,6 +701,7 @@ const ClientsManagement = () => {
               width: "45",
               alignItems: "center",
               justifyContent: "center",
+              color: "#FFFFFF",
             }}
           >
             {item.sms_status ? "Sent" : "Unsent"}
@@ -748,12 +764,22 @@ const ClientsManagement = () => {
         </View>
 
         <DataTable.Header style={styles.tableHeader}>
-          <DataTable.Title style={{ flex: 0.6 }}>
+          <DataTable.Title
+            style={[{ flex: 0.6 }, styles.tableTitle]}
+            textStyle={{ color: "#000000" }}
+          >
             {showSelectAll ? "" : "S No."}
           </DataTable.Title>
-          <DataTable.Title style={{ flex: 2 }}>Client Info</DataTable.Title>
+          <DataTable.Title
+            style={{ flex: 2, color: "#000000" }}
+            textStyle={{ color: "#000000" }}
+          >
+            Client Info
+          </DataTable.Title>
           {/* <DataTable.Title style={{ flex: 2 }}>Contact</DataTable.Title> */}
-          <DataTable.Title style={{ flex: 1 }}>Status</DataTable.Title>
+          <DataTable.Title style={{ flex: 1 }} textStyle={{ color: "#000000" }}>
+            Status
+          </DataTable.Title>
         </DataTable.Header>
 
         {isLoading ? (
@@ -1148,6 +1174,9 @@ const modalStyles = StyleSheet.create({
   applyButtonText: {
     color: "#fff",
     fontWeight: "500",
+  },
+  tableTitle: {
+    color: "#000000",
   },
 });
 

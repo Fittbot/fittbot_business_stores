@@ -9,6 +9,7 @@ import ClientDietReport from "../../../components/client/ClientDietReport";
 import ClientWorkoutReport from "../../../components/client/ClientWorkoutReport";
 import { useRouter } from "expo-router";
 import { showToast } from "../../../utils/Toaster";
+import AccessDeniedComponent from "../../../utils/accessDeniedComponent";
 
 const ClientInfo = () => {
   const { id, client: clientString } = useLocalSearchParams();
@@ -30,11 +31,13 @@ const ClientInfo = () => {
     }
   }, [clientString]);
 
-  const tabs = [
-    { id: "info", label: "Information" },
-    { id: "workout", label: "Workout Report" },
-    { id: "diet", label: "Diet Report" },
-  ];
+  const tabs = client?.is_old_client
+    ? [{ id: "info", label: "Information" }]
+    : [
+        { id: "info", label: "Information" },
+        { id: "workout", label: "Workout Report" },
+        { id: "diet", label: "Diet Report" },
+      ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,9 +46,6 @@ const ClientInfo = () => {
         onBackButtonPress={() => {
           router.push({
             pathname: "/owner/client",
-            // params: {
-            //   id: id,
-            // },
           });
         }}
       />
@@ -54,10 +54,21 @@ const ClientInfo = () => {
 
       <SafeAreaView style={styles.container}>
         {activeTab === "info" && <ClientInformation client={client} />}
-        {activeTab === "diet" && <ClientDietReport clientId={id} />}
-        {activeTab === "workout" && (
-          <ClientWorkoutReport clientId={id} gender={client.gender || "male"} />
-        )}
+        {activeTab === "diet" &&
+          (client.data_sharing ? (
+            <ClientDietReport clientId={id} />
+          ) : (
+            <AccessDeniedComponent />
+          ))}
+        {activeTab === "workout" &&
+          (client.data_sharing ? (
+            <ClientWorkoutReport
+              clientId={id}
+              gender={client.gender || "male"}
+            />
+          ) : (
+            <AccessDeniedComponent />
+          ))}
       </SafeAreaView>
       <Toast />
     </SafeAreaView>
@@ -66,7 +77,6 @@ const ClientInfo = () => {
 
 export default ClientInfo;
 
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,

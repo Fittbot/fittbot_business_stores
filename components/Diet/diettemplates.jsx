@@ -107,7 +107,8 @@ const DietTemplate = (props) => {
         showToast({
           type: "error",
           title: "Error",
-          desc: response?.detail || "Something went wrong. Please try again later",
+          desc:
+            response?.detail || "Something went wrong. Please try again later",
         });
       }
     } catch (error) {
@@ -150,7 +151,9 @@ const DietTemplate = (props) => {
           showToast({
             type: "error",
             title: "Error",
-            desc: response?.detail || "Something went wrong. Please try again later",
+            desc:
+              response?.detail ||
+              "Something went wrong. Please try again later",
           });
         }
       } catch (error) {
@@ -190,7 +193,9 @@ const DietTemplate = (props) => {
                 showToast({
                   type: "error",
                   title: "Error",
-                  desc: response?.detail || "Something went wrong. Please try again later",
+                  desc:
+                    response?.detail ||
+                    "Something went wrong. Please try again later",
                 });
               }
             } catch (error) {
@@ -234,7 +239,9 @@ const DietTemplate = (props) => {
           showToast({
             type: "error",
             title: "Error",
-            desc: response?.detail || "Something went wrong. Please try again later",
+            desc:
+              response?.detail ||
+              "Something went wrong. Please try again later",
           });
         }
       } catch (error) {
@@ -280,7 +287,8 @@ const DietTemplate = (props) => {
         showToast({
           type: "error",
           title: "Error",
-          desc: response?.detail || "Something went wrong. Please try again later",
+          desc:
+            response?.detail || "Something went wrong. Please try again later",
         });
       }
     } catch (error) {
@@ -312,7 +320,8 @@ const DietTemplate = (props) => {
         showToast({
           type: "error",
           title: "Error",
-          desc: response?.detail || "Something went wrong. Please try again later",
+          desc:
+            response?.detail || "Something went wrong. Please try again later",
         });
       }
     } catch (error) {
@@ -657,7 +666,7 @@ const DietTemplate = (props) => {
                   style={[
                     styles.foodCard,
                     selectedDishes.some((d) => d.id === food.id) &&
-                    styles.selectedFoodCard,
+                      styles.selectedFoodCard,
                   ]}
                   onPress={() => toggleDishSelection(food)}
                 >

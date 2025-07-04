@@ -30,7 +30,7 @@ import { useNavigation } from "../../../context/NavigationContext";
 import MenuItems from "../../../components/ui/Header/tabs";
 import EmptyStateCard from "../../../components/ui/EmptyDataComponent";
 import { showToast } from "../../../utils/Toaster";
-
+import useEdgeSwipe from "../../../hooks/useEdgeSwipe";
 const screenWidth = Dimensions.get("window").width;
 const { width, height } = Dimensions.get("window");
 
@@ -61,6 +61,26 @@ const GymAnalysis = () => {
     extrapolate: "clamp",
   });
 
+  const {
+    panHandlers,
+    SwipeIndicator,
+    isSwipeActive,
+    isEnabled: swipeEnabled,
+    swipeAnimatedValue,
+    resetSwipe,
+    debug,
+    temporarilyDisableSwipe,
+  } = useEdgeSwipe({
+    onSwipeComplete: toggleSideNav,
+    isEnabled: true,
+    isBlocked: isSideNavVisible,
+    config: {
+      edgeSwipeThreshold: 30,
+      swipeMinDistance: 50,
+      swipeMinVelocity: 0.3,
+      preventIOSBackSwipe: true,
+    },
+  });
   const contentPaddingTop = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [180, 20],
@@ -95,6 +115,7 @@ const GymAnalysis = () => {
         return;
       }
       const response = await getAnalysisAPI(gymId);
+
       if (response?.status === 200) {
         setHourlyAggData(response.data.hourly_agg || {});
         setAnalysisData(response.data.analysis || {});
@@ -161,78 +182,43 @@ const GymAnalysis = () => {
       {
         id: "gender",
         title: "Gender Distribution",
-        data: Object.entries(analysisData.gender || {}).map(
-          ([name, value]) => ({
-            name,
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.gender),
         category: "members",
       },
       {
         id: "goal_data",
         title: "Member Goals",
-        data: Object.entries(analysisData.goal_data || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.goal_data),
         category: "members",
       },
       {
         id: "expenditure",
         title: "Expenditure Distribution",
-        data: Object.entries(analysisData.expenditure || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.expenditure),
         category: "finance",
       },
       {
         id: "goal_income",
         title: "Income by Goal",
-        data: Object.entries(analysisData.goal_income || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.goal_income),
         category: "finance",
       },
       {
         id: "training_data",
         title: "Training Types",
-        data: Object.entries(analysisData.training_data || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.training_data),
         category: "members",
       },
       {
         id: "training_income",
         title: "Income by Training Type",
-        data: Object.entries(analysisData.training_income || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.training_income),
         category: "finance",
       },
       {
         id: "expenditure_data",
         title: "Detailed Expenditure",
-        data: Object.entries(analysisData.expenditure_data || {}).map(
-          ([name, value]) => ({
-            name: formatName(name),
-            value: Number(value), // Ensure value is a number
-          })
-        ),
+        data: processAnalysisData(analysisData.expenditure_data),
         category: "finance",
       },
     ];
@@ -243,7 +229,35 @@ const GymAnalysis = () => {
     );
   };
 
+  const processAnalysisData = (data) => {
+    if (!data) return [];
+
+    // If data is already an array of objects with name and value
+    if (Array.isArray(data)) {
+      return data
+        .map((item) => ({
+          name:
+            typeof item.name === "string" ? formatName(item.name) : item.name,
+          value: Number(item.value) || 0,
+        }))
+        .filter((item) => item.value > 0); // Filter out zero values
+    }
+
+    // If data is an object, convert it to array format
+    if (typeof data === "object" && data !== null) {
+      return Object.entries(data)
+        .map(([name, value]) => ({
+          name: formatName(name),
+          value: Number(value) || 0,
+        }))
+        .filter((item) => item.value > 0); // Filter out zero values
+    }
+
+    return [];
+  };
   function formatName(name) {
+    if (!name || typeof name !== "string") return name;
+
     return name
       .split("_")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -251,9 +265,12 @@ const GymAnalysis = () => {
   }
 
   const renderPieChart = (data, title, key) => {
-    // Add more defensive checks
+    // Debug logging
+    console.log(`Rendering pie chart for ${title}:`, data);
 
+    // Add more defensive checks
     if (!data || !Array.isArray(data) || data.length === 0) {
+      console.log(`No data available for ${title}`);
       return null;
     }
 
@@ -267,10 +284,19 @@ const GymAnalysis = () => {
 
     // Don't render if all values are 0
     if (values.every((v) => v === 0)) {
+      console.log(`All values are zero for ${title}`);
       return null;
     }
 
-    // Ensure we don't exceed our color array length
+    // Filter out zero values from both data and values arrays
+    const filteredData = data.filter((item) => Number(item.value) > 0);
+    const filteredValues = filteredData.map((item) => Number(item.value));
+
+    if (filteredData.length === 0) {
+      console.log(`No valid data after filtering for ${title}`);
+      return null;
+    }
+
     const colors = [
       "#AAC6FF",
       "#6395FF",
@@ -280,28 +306,9 @@ const GymAnalysis = () => {
       "#2F69E4",
       "#0035A4",
     ];
-    // const colors = [
-    //   '#33817B',
-    //   'rgba(0, 47, 43, 0.8)',
-    //   '#80B0AC',
-    //   '#597371',
-    //   '#ACB9B8',
-    //   '#00625A',
-    //   '#00A897',
-    // ];
-    // const colors = [
-    //   '#FF7043',
-    //   '#FFA726',
-    //   '#FFCC80',
-    //   '#FFD54F',
-    //   '#64B5F6',
-    //   '#4FC3F7',
-    //   '#81C784',
-    // ];
 
     return (
       <View style={{ paddingHorizontal: 10, marginTop: 10 }}>
-        {/* <Text style={styles.sectionTitle}>{title}</Text> */}
         <MaskedView
           maskElement={
             <Text style={[styles.sectionTitle, { paddingLeft: 10 }]}>
@@ -322,12 +329,12 @@ const GymAnalysis = () => {
         <View style={styles.chartContainer}>
           <PieChart
             widthAndHeight={chartWidth * 0.6}
-            series={values}
-            sliceColor={colors.slice(0, values.length)}
+            series={filteredValues}
+            sliceColor={colors.slice(0, filteredValues.length)}
           />
 
           <View style={styles.legendContainer}>
-            {data.map((item, index) => (
+            {filteredData.map((item, index) => (
               <View key={`${key}-${index}`} style={styles.legendItem}>
                 <View
                   style={[
@@ -520,7 +527,7 @@ const GymAnalysis = () => {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panHandlers}>
       <HeaderComponent
         showHeader={true}
         headerTranslateY={headerTranslateY}
@@ -556,6 +563,7 @@ const GymAnalysis = () => {
         />
       )}
 
+      <SwipeIndicator />
       <Animated.View
         style={[styles.contentContainer, { paddingTop: contentPaddingTop }]}
         onScroll={Animated.event(

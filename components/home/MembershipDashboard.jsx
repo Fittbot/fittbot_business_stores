@@ -432,6 +432,7 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginVertical: 40,
+    marginHorizontal:50
   },
 });
 

@@ -1,9 +1,4 @@
-// console.log(dateUtils.getCurrentDateFormatted()); // "2025-04-07"
-// console.log(dateUtils.getCurrentTimeFormatted()); // "13:42:10"
-// console.log(dateUtils.formatDate(new Date()));    // "2025-04-07"
-// console.log(dateUtils.addDays(new Date(), 5));    // Date object 5 days from now
-// console.log(dateUtils.isToday(new Date()));       // true
-// console.log(dateUtils.parseDate('2025-04-10'));   // Date object for April 10, 2025
+
 
 export const dateUtils = {
   // Returns current date in YYYY-MM-DD format
@@ -13,7 +8,6 @@ export const dateUtils = {
   },
 
   formatToDateOnly(datetime) {
-    // console.log({ datetime });
     if (datetime) {
       return datetime.split(' ')[0];
     }

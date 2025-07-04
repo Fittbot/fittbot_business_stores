@@ -21,6 +21,7 @@ const sampleData = [
     Location: 'Chennai',
     Gender: 'Male',
     Status: 'active',
+    AdmissionNumber:'ABC0005'
   },
   {
     Name: 'Emma Johnson',
@@ -29,6 +30,7 @@ const sampleData = [
     Location: 'Bangalore',
     Gender: 'Female',
     Status: 'inactive',
+    AdmissionNumber:'ABC0006'
   },
   {
     Name: 'Michael Rodriguez',
@@ -37,6 +39,7 @@ const sampleData = [
     Location: 'Chennai',
     Gender: 'Male',
     Status: 'inactive',
+    AdmissionNumber:'ABC0007'
   },
 ];
 
@@ -123,27 +126,31 @@ const GetGymClientDataInstructionModal = ({
       <View style={styles.tableHeader}>
         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Name</Text>
         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Email</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Contact</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Location</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Gender</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Status</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Contact</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Location</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Gender</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Admission number (optional)</Text>
       </View>
 
       {sampleData.map((client, index) => (
         <View key={index} style={styles.tableRow}>
-          <Text style={[styles.tableCell, { flex: 1 }]}>{client.Name}</Text>
-          <Text style={[styles.tableCell, { flex: 1 }]}>{client.Email}</Text>
-          <Text style={[styles.tableCell, { flex: 0.6 }]}>
-            {client.Contact}
+          <Text style={[styles.tableCell, { flex: 1 }]}>{client.Name}{' '}</Text>
+          <Text style={[styles.tableCell, { flex: 1 }]}>{client.Email}{' '}</Text>
+          <Text style={[styles.tableCell, { flex: 1 }]}>
+            {client.Contact}{' '}
           </Text>
-          <Text style={[styles.tableCell, { flex: 0.6 }]}>
-            {client.Location}
+          <Text style={[styles.tableCell, { flex: 1 }]}>
+            {client.Location}{' '}
           </Text>
-          <Text style={[styles.tableCell, { flex: 0.8 }]}>
+          <Text style={[styles.tableCell, { flex: 1 }]}>
             {client.Gender}{' '}
           </Text>
-          <Text style={[styles.tableCell, { flex: 0.6 }]}>
+          <Text style={[styles.tableCell, { flex: 1 }]}>
             {client.Status}{' '}
+          </Text>
+          <Text style={[styles.tableCell, { flex: 1 }]}>
+            {client.AdmissionNumber}{' '}
           </Text>
         </View>
       ))}
@@ -277,6 +284,9 @@ const GetGymClientDataInstructionModal = ({
                   </Text>
                   <Text style={styles.tipItem}>
                     • Status must be "active" or "inactive"
+                  </Text>
+                  <Text style={styles.tipItem}>
+                    • Admision Number is (Optional)
                   </Text>
                 </View>
               </View>
@@ -465,6 +475,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginTop: 16,
+    marginBottom:20
   },
   tipsTitle: {
     fontSize: 14,

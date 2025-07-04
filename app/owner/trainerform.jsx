@@ -14,10 +14,10 @@ import {
   Alert,
   TouchableWithoutFeedback,
   Platform,
+  ActivityIndicator,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import * as ImagePicker from "expo-image-picker";
 import RNPickerSelect from "react-native-picker-select";
-import OwnerHeader from "../../components/ui/OwnerHeader";
 import {
   addTrainerAPI,
   updateTrainerAPI,
@@ -33,6 +33,7 @@ import TabHeader from "../../components/home/finances/TabHeader";
 import { showToast } from "../../utils/Toaster";
 import NoDataComponent from "../../utils/noDataComponent";
 import HardwareBackHandler from "../../components/HardwareBackHandler";
+import axiosInstance from "../../services/axiosInstance";
 
 const { width, height } = Dimensions.get("window");
 const responsiveWidth = (percentage) => width * (percentage / 100);
@@ -66,6 +67,9 @@ const AddTrainerScreen = () => {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [selectedItemForOptions, setSelectedItemForOptions] = useState(null);
   const [optionsPosition, setOptionsPosition] = useState({ top: 0, right: 0 });
+  const [imageUploadModalVisible, setImageUploadModalVisible] = useState(false);
+
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
     fetchTrainers();
@@ -101,17 +105,155 @@ const AddTrainerScreen = () => {
     }
   };
 
+  const handleImageSelect = async (imageAsset) => {
+    if (imageAsset && imageAsset.uri) {
+      setImageUploading(true);
+      try {
+        const imageUri = imageAsset.uri;
+        const uriParts = imageUri?.split("/");
+        const fileName = uriParts[uriParts.length - 1];
+        const fileNameParts = fileName.split(".");
+        const extension =
+          fileNameParts.length > 1
+            ? fileNameParts[fileNameParts.length - 1]
+            : "";
+
+        const gym_id = await getToken("gym_id");
+        if (!gym_id) {
+          showToast({
+            type: "error",
+            title: "Gym ID not found",
+          });
+          return;
+        }
+
+        showToast({
+          type: "info",
+          title: "Uploading image...",
+        });
+
+        const { data: uploadResp } = await axiosInstance.get(
+          "/trainers/upload-url",
+          {
+            params: {
+              gym_id: gym_id,
+              extension: extension,
+              scope: "profile_image",
+            },
+          }
+        );
+
+        const { upload, cdn_url } = uploadResp.data;
+
+        const form = new FormData();
+        Object.entries(upload.fields).forEach(([k, v]) => form.append(k, v));
+        const contentType = upload.fields["Content-Type"];
+
+        form.append("file", {
+          uri: imageUri,
+          name: upload.fields.key.split("/").pop(),
+          type: contentType,
+        });
+
+        const s3Resp = await fetch(upload.url, {
+          method: "POST",
+          body: form,
+        });
+
+        if (s3Resp.status !== 204 && s3Resp.status !== 201) {
+          showToast({
+            type: "error",
+            title: "Failed to upload image. Please try again.",
+          });
+          return;
+        }
+
+        const res = await axiosInstance.post("/trainers/confirm", {
+          cdn_url,
+          gym_id: gym_id,
+          scope: "profile_image",
+        });
+
+        if (res?.status === 200) {
+          handleInputChange("profileImage", cdn_url);
+
+          showToast({
+            type: "success",
+            title: "Image uploaded successfully",
+          });
+        } else {
+          showToast({
+            type: "error",
+            title: "Failed to confirm upload. Please try again.",
+          });
+        }
+      } catch (error) {
+        console.error("Image upload error:", error);
+
+        let errorMessage = "Failed to upload image. Please try again.";
+
+        if (error.response) {
+          errorMessage =
+            error.response.data?.detail ||
+            error.response.data?.message ||
+            errorMessage;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
+        showToast({
+          type: "error",
+          title: errorMessage,
+        });
+      } finally {
+        setImageUploading(false);
+      }
+    }
+  };
+
+  const showImagePickerOptions = () => {
+    if (imageUploading) {
+      showToast({
+        type: "info",
+        title: "Please wait for current upload to complete",
+      });
+      return;
+    }
+    setImageUploadModalVisible(true);
+  };
+
+  const removeImage = () => {
+    if (imageUploading) {
+      showToast({
+        type: "info",
+        title: "Cannot remove image while uploading",
+      });
+      return;
+    }
+
+    Alert.alert(
+      "Remove Picture",
+      "Are you sure you want to remove the profile picture?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => handleInputChange("profileImage", null),
+        },
+      ]
+    );
+  };
+
   const handleOptionsPress = (item, event) => {
     setSelectedItemForOptions(item);
     const { pageX, pageY } = event.nativeEvent;
 
-    // Position the dropdown below the ellipsis icon
     setOptionsPosition({
-      top: pageY + 20, // Add some space below the icon
+      top: pageY + 20,
       right: 50,
     });
 
-    // Show the options
     setOptionsVisible(true);
   };
 
@@ -170,7 +312,7 @@ const AddTrainerScreen = () => {
 
               if (!gym_id) {
                 showToast({
-                  title: "Error",
+                  type: "error",
                   title: "Gym Id is not there",
                 });
                 return;
@@ -178,20 +320,20 @@ const AddTrainerScreen = () => {
               const response = await deleteTrainerAPI(trainerId, gym_id);
               if (response?.status === 200) {
                 showToast({
-                  title: "Success",
+                  type: "success",
                   title: "Trainer deleted successfully!",
                 });
                 setShowTrainersList(false);
                 fetchTrainers();
               } else {
                 showToast({
-                  title: "Error",
+                  type: "error",
                   title: "Failed to delete trainer.",
                 });
               }
             } catch (error) {
               showToast({
-                title: "Error",
+                type: "error",
                 title: "An error occurred while deleting trainer.",
               });
             }
@@ -205,8 +347,16 @@ const AddTrainerScreen = () => {
   const submitForm = async () => {
     if (!form.fullName || !form.contact || !form.specialization) {
       showToast({
-        title: "Error",
+        type: "error",
         title: "Please fill all mandatory fields.",
+      });
+      return;
+    }
+
+    if (imageUploading) {
+      showToast({
+        type: "info",
+        title: "Please wait for image upload to complete.",
       });
       return;
     }
@@ -216,7 +366,7 @@ const AddTrainerScreen = () => {
 
       if (!gymId) {
         showToast({
-          title: "Error",
+          type: "error",
           title: "Gym Id is not there",
         });
         return;
@@ -234,7 +384,6 @@ const AddTrainerScreen = () => {
         availability: form.availability,
         profile_image: form.profileImage,
         trainer_id: form.trainer_id,
-        password: "12345678",
       };
 
       const response = isEditing
@@ -254,29 +403,50 @@ const AddTrainerScreen = () => {
         await fetchTrainers();
         setActiveTab("view_trainers");
       } else {
+        let errorMessage = "Failed to save trainer";
+
+        if (response?.detail) {
+          errorMessage = response.detail;
+        } else if (!isEditing) {
+          errorMessage = "Failed to add trainer";
+        } else {
+          errorMessage = "Failed to update trainer";
+        }
+
         showToast({
           type: "error",
-          title: isEditing ? "Failed to update trainer." : response.detail,
+          title: errorMessage,
         });
       }
     } catch (error) {
+      console.error("Form submission error:", error);
+
+      let errorMessage = "An error occurred";
+
+      if (error.response) {
+        errorMessage =
+          error.response.data?.detail ||
+          error.response.data?.message ||
+          `Server error: ${error.response.status}`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
       showToast({
         type: "error",
-        title: error?.detail,
+        title: errorMessage,
       });
     }
   };
 
   const handleEditPress = (item) => {
     setOptionsVisible(false);
-
     handleEdit(item);
     setActiveTab("add_trainer");
   };
 
   const handleDeletePress = (item) => {
     setOptionsVisible(false);
-
     handleDelete(item.trainer_id);
   };
 
@@ -369,26 +539,6 @@ const AddTrainerScreen = () => {
                     <Ionicons size={16} name="ellipsis-vertical" />
                   </TouchableOpacity>
                 </View>
-
-                {/* <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.editButton]}
-                    onPress={() => {
-                      handleEdit(trainer);
-                      setActiveTab('add_trainer');
-                    }}
-                  >
-                    <MaterialIcons name="edit" size={18} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDelete(trainer.trainer_id)}
-                  >
-                    <MaterialIcons name="delete" size={18} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View> */}
               </View>
             ))}
           </View>
@@ -397,18 +547,150 @@ const AddTrainerScreen = () => {
         <View style={{ marginTop: 50 }}>
           <NoDataComponent
             icon={"user"}
-            // iconSize = 50
-            // iconColor = '#10A0F6'
             title={"No Trainers Available"}
             message="Looks like there is no data here yet."
             buttonText={"Add Trainer"}
             onButtonPress={() => setActiveTab("add_trainer")}
-            // navigateTo,
           />
         </View>
       )}
     </ScrollView>
   );
+
+  const ImageUploadModal = ({
+    isVisible,
+    onClose,
+    onImageSelect,
+    title,
+    aspectRatio = [1, 1],
+  }) => {
+    const selectImage = async () => {
+      try {
+        const permissionResult =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.granted === false) {
+          showToast({
+            type: "error",
+            title:
+              "Please allow access to your photo library to upload images.",
+          });
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: aspectRatio,
+          quality: 0.8,
+        });
+
+        if (!result.canceled) {
+          onImageSelect(result.assets[0]);
+          onClose();
+        }
+      } catch (error) {
+        showToast({
+          type: "error",
+          title: error || "Failed to select Image",
+        });
+      }
+    };
+
+    const takePhoto = async () => {
+      try {
+        const permissionResult =
+          await ImagePicker.requestCameraPermissionsAsync();
+
+        if (permissionResult.granted === false) {
+          showToast({
+            type: "error",
+            title: "Please allow access to your camera to take photos.",
+          });
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: aspectRatio,
+          quality: 0.8,
+        });
+
+        if (!result.canceled) {
+          onImageSelect(result.assets[0]);
+          onClose();
+        }
+      } catch (error) {
+        showToast({
+          type: "error",
+          title: error || "Failed to take photo",
+        });
+      }
+    };
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isVisible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.imageUploadModalContainer}>
+            <View style={styles.passwordModalHeader}>
+              <Text style={styles.passwordModalTitle}>{title}</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.uploadOptionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.uploadOption,
+                  imageUploading && styles.disabledOption,
+                ]}
+                onPress={selectImage}
+                disabled={imageUploading}
+              >
+                <View style={styles.uploadOptionIcon}>
+                  <Ionicons name="images-outline" size={24} color="#3498db" />
+                </View>
+                <Text style={styles.uploadOptionText}>Choose from Gallery</Text>
+                {imageUploading && (
+                  <ActivityIndicator size="small" color="#3498db" />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.uploadOption,
+                  imageUploading && styles.disabledOption,
+                ]}
+                onPress={takePhoto}
+                disabled={imageUploading}
+              >
+                <View style={styles.uploadOptionIcon}>
+                  <Ionicons name="camera-outline" size={24} color="#3498db" />
+                </View>
+                <Text style={styles.uploadOptionText}>Take Photo</Text>
+                {imageUploading && (
+                  <ActivityIndicator size="small" color="#3498db" />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {imageUploading && (
+              <View style={styles.uploadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.uploadingText}>Uploading image...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   const tabs = [
     { id: "view_trainers", label: "View Trainers", icon: "" },
@@ -442,9 +724,82 @@ const AddTrainerScreen = () => {
           contentContainerStyle={styles.scrollViewContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Basic Details */}
           <View style={styles.formSection}>
             <Text style={styles.sectionTitle}>Basic Details</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Profile Picture (Optional)</Text>
+              <View style={styles.imageContainer}>
+                {form.profileImage ? (
+                  <View style={styles.imageWrapper}>
+                    <Image
+                      source={{ uri: form.profileImage }}
+                      style={styles.profileImage}
+                      resizeMode="cover"
+                    />
+                    {!imageUploading && (
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={removeImage}
+                      >
+                        <Ionicons
+                          name="close-circle"
+                          size={24}
+                          color="#FF5757"
+                        />
+                      </TouchableOpacity>
+                    )}
+                    {imageUploading && (
+                      <View style={styles.uploadOverlay}>
+                        <ActivityIndicator size="large" color="#007AFF" />
+                        <Text style={styles.uploadOverlayText}>
+                          Uploading...
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.imagePlaceholderContainer,
+                      imageUploading && styles.disabledPlaceholder,
+                    ]}
+                    onPress={showImagePickerOptions}
+                    disabled={imageUploading}
+                  >
+                    {imageUploading ? (
+                      <>
+                        <ActivityIndicator size={30} color="#007AFF" />
+                        <Text style={styles.imagePlaceholder}>
+                          Uploading image...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="camera" size={30} color="#A0A0A0" />
+                        <Text style={styles.imagePlaceholder}>
+                          Tap to add profile picture
+                        </Text>
+                        <Text style={styles.imageAspectText}>
+                          (1:1 ratio recommended)
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {form.profileImage && !imageUploading && (
+                  <TouchableOpacity
+                    style={styles.changeImageButton}
+                    onPress={showImagePickerOptions}
+                  >
+                    <Ionicons name="camera" size={16} color="#007AFF" />
+                    <Text style={styles.changeImageText}>Change Picture</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Name*</Text>
               <TextInput
@@ -507,7 +862,6 @@ const AddTrainerScreen = () => {
             </View>
           </View>
 
-          {/* Professional Details */}
           <View style={styles.formSection}>
             <Text style={styles.sectionTitle}>Professional Details</Text>
             <View style={styles.inputGroup}>
@@ -585,17 +939,36 @@ const AddTrainerScreen = () => {
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
-              style={[styles.submitButton, isEditing && styles.updateButton]}
+              style={[
+                styles.submitButton,
+                isEditing && styles.updateButton,
+                imageUploading && styles.disabledButton,
+              ]}
               onPress={submitForm}
+              disabled={imageUploading}
             >
-              <Text style={styles.submitButtonText}>
-                {isEditing
-                  ? "Update Trainer Details"
-                  : "Submit Trainer Details"}
-              </Text>
+              {imageUploading ? (
+                <View style={styles.buttonLoadingContainer}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={styles.submitButtonText}>Processing...</Text>
+                </View>
+              ) : (
+                <Text style={styles.submitButtonText}>
+                  {isEditing
+                    ? "Update Trainer Details"
+                    : "Submit Trainer Details"}
+                </Text>
+              )}
             </TouchableOpacity>
             {isEditing && (
-              <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
+              <TouchableOpacity
+                style={[
+                  styles.cancelButton,
+                  imageUploading && styles.disabledButton,
+                ]}
+                onPress={resetForm}
+                disabled={imageUploading}
+              >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
             )}
@@ -604,6 +977,14 @@ const AddTrainerScreen = () => {
       )}
 
       {renderOptionsDropdown()}
+
+      <ImageUploadModal
+        isVisible={imageUploadModalVisible}
+        onClose={() => setImageUploadModalVisible(false)}
+        onImageSelect={handleImageSelect}
+        title="Select Profile Picture"
+        aspectRatio={[1, 1]}
+      />
     </SafeAreaView>
   );
 };
@@ -671,28 +1052,93 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     alignItems: "center",
-    marginBottom: height * 0.02,
+    marginBottom: height * 0.01,
+  },
+  imageWrapper: {
+    position: "relative",
+    marginBottom: height * 0.01,
+  },
+  profileImage: {
+    width: width * 0.6,
+    height: width * 0.6 * (9 / 16),
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+  },
+  uploadOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  uploadOverlayText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+    marginTop: 8,
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   imagePlaceholderContainer: {
-    width: width * 0.3,
-    height: width * 0.3,
-    borderRadius: (width * 0.3) / 2,
-    backgroundColor: "#E8E8E8",
+    width: width * 0.5,
+    height: width * 0.5 * (1 / 1),
+    borderRadius: 12,
+    backgroundColor: "#F8F8F8",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: "#A0A0A0",
+    borderColor: "#D0D0D0",
+    marginBottom: height * 0.01,
   },
-  image: {
-    width: width * 0.3,
-    height: width * 0.3,
-    borderRadius: (width * 0.3) / 2,
+  disabledPlaceholder: {
+    backgroundColor: "#F0F0F0",
+    borderColor: "#C0C0C0",
   },
   imagePlaceholder: {
-    color: "#7F8C8D",
+    color: "#A0A0A0",
     textAlign: "center",
     fontSize: width * 0.035,
+    marginTop: 8,
+    fontWeight: "500",
+  },
+  imageAspectText: {
+    color: "#C0C0C0",
+    textAlign: "center",
+    fontSize: width * 0.03,
+    marginTop: 4,
+  },
+  changeImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  changeImageText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 6,
   },
   radioGroup: {
     flexDirection: "row",
@@ -737,22 +1183,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
-    // marginTop: height * 0.02,
     shadowColor: "#3498DB",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
   },
+  disabledButton: {
+    backgroundColor: "#A0A0A0",
+    shadowOpacity: 0.1,
+  },
+  buttonLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   submitButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "500",
+    marginLeft: 8,
   },
   headerContainer: {
-    // flexDirection: 'row',
-    // justifyContent: 'space-between',
-    // alignItems: 'center',
     paddingHorizontal: width * 0.05,
     marginVertical: height * 0.02,
   },
@@ -775,17 +1227,14 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    // backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: "center",
     alignItems: "center",
     marginTop: 15,
   },
   modalContent: {
-    // backgroundColor: '#FFFFFF',
     width: width * 0.9,
-    height: height * 0.8,
+    height: Platform.OS === "ios" ? height * 1 : height * 1.1,
     borderRadius: 20,
-    // padding: width * 0.04,
   },
   modalHeader: {
     flexDirection: "row",
@@ -817,15 +1266,15 @@ const styles = StyleSheet.create({
   },
   trainerInfo: {
     flexDirection: "row",
-    // alignItems: 'center',
+    alignItems: "center",
   },
   trainerImageContainer: {
     marginRight: width * 0.04,
   },
   trainerImage: {
-    width: width * 0.15,
-    height: width * 0.15,
-    borderRadius: (width * 0.15) / 2,
+    width: width * 0.12,
+    height: width * 0.12,
+    borderRadius: (width * 0.12) / 2,
   },
   trainerImagePlaceholder: {
     width: width * 0.12,
@@ -889,10 +1338,9 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: "#95A5A6",
     borderRadius: 12,
-    paddingVertical: height * 0.02,
+    paddingVertical: 12,
     alignItems: "center",
     marginTop: height * 0.02,
-    paddingVertical: 12,
   },
   cancelButtonText: {
     color: "#FFFFFF",
@@ -903,7 +1351,6 @@ const styles = StyleSheet.create({
     marginTop: height * 0.02,
   },
 
-  // Options dropdown styles
   optionsOverlay: {
     position: "absolute",
     top: 0,
@@ -942,6 +1389,77 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8E8E8",
     width: "100%",
   },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageUploadModalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    margin: 20,
+    width: width * 0.85,
+    maxWidth: 400,
+  },
+  passwordModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  passwordModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#2C3E50",
+  },
+  uploadOptionsContainer: {
+    gap: 15,
+  },
+  uploadOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  disabledOption: {
+    backgroundColor: "#F0F0F0",
+    borderColor: "#D0D0D0",
+    opacity: 0.6,
+  },
+  uploadOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E3F2FD",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  uploadOptionText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#2C3E50",
+    flex: 1,
+  },
+  uploadingContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E9ECEF",
+    marginTop: 15,
+  },
+  uploadingText: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 10,
+    fontWeight: "500",
+  },
 });
 
 const pickerSelectStyles = StyleSheet.create({
@@ -949,10 +1467,10 @@ const pickerSelectStyles = StyleSheet.create({
     fontSize: 14,
     paddingVertical: 15,
     paddingHorizontal: 15,
-    borderWidth: 0, // Remove border since container already has it
+    borderWidth: 0,
     borderRadius: 8,
     color: "#2C3E50",
-    paddingRight: 40, // Ensure text doesn't overlap with icon
+    paddingRight: 40,
     backgroundColor: "transparent",
     minHeight: 45,
   },

@@ -13,7 +13,8 @@ import { showToast } from "../../utils/Toaster";
 import {
   SendEstimatesToExpireMembers,
   UpdateInvoiceDiscount,
-} from "../../services/Api"; // Only keep relevant API calls
+  SendReceiptsToPaidMembers
+} from "../../services/Api"; 
 import UserItem2 from "./UserItem2";
 import NoDataComponent from "../../utils/noDataComponent";
 import PaginationControls from "../ui/PaginationControls";
@@ -21,10 +22,10 @@ import PaginationControls from "../ui/PaginationControls";
 const RenderAboutToExpirePage = ({
   SetShowInvoice,
   setParticularInvoiceData,
-  fetchInvoiceData, // Updated prop name to be more generic for fetching
+  fetchInvoiceData, 
   activeTab,
-  title, // 'Estimate' or 'Receipt'
-  allUsers, // This prop now holds the already filtered and searched users
+  title, 
+  allUsers, 
   currentPage,
   setCurrentPage,
   itemsPerPage,
@@ -33,49 +34,64 @@ const RenderAboutToExpirePage = ({
   localSelectedYear,
   isAboutToExpireModalOpen,
   handleOpenAboutToExpireModal,
+  paginationInfo = null, 
+  viewMode = "monthly", 
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [isSelectAll, setIsSelectAll] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [emailProgress, setEmailProgress] = useState({ sent: 0, total: 0 });
-  const [emailSentUsers, setEmailSentUsers] = useState([]); // Stores IDs of users for whom emails have been sent
-
-  // State for paginated users (derived from allUsers)
+  const [emailSentUsers, setEmailSentUsers] = useState([]); 
   const [paginatedUsers, setPaginatedUsers] = useState([]);
   const [paginationLoading, setPaginationLoading] = useState(false);
 
-  // Reset selection and emailSentUsers when activeTab or allUsers changes
   useEffect(() => {
     setSelectedItems([]);
     setIsSelectAll(false);
-    setEmailSentUsers([]); // Clear sent status when data or tab changes
+    setEmailSentUsers([]); 
   }, [activeTab, allUsers]);
 
-  // Effect to handle pagination logic
   useEffect(() => {
-    setPaginationLoading(true);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentItems = allUsers?.slice(startIndex, endIndex);
-
-    setTimeout(() => {
-      setPaginatedUsers(currentItems);
+    if (viewMode === "all" || !allUsers) {
+      setPaginatedUsers(allUsers || []);
       setPaginationLoading(false);
-      if (flatListRef.current) {
-        flatListRef?.current.scrollToOffset({ offset: 0, animated: true });
-      }
-    }, 100); // Small delay for smoother pagination
-  }, [currentPage, allUsers, itemsPerPage]);
+    } else {
+      setPaginationLoading(true);
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const currentItems = allUsers?.slice(startIndex, endIndex);
+
+      setTimeout(() => {
+        setPaginatedUsers(currentItems);
+        setPaginationLoading(false);
+        if (flatListRef.current) {
+          flatListRef?.current.scrollToOffset({ offset: 0, animated: true });
+        }
+      }, 100); 
+    }
+  }, [currentPage, allUsers, itemsPerPage, viewMode]);
 
   const handlePageChange = useCallback(
     (page) => {
-      if (page < 1 || page > Math.ceil(allUsers?.length / itemsPerPage)) {
+      let maxPages;
+      
+      if (viewMode === "all" && paginationInfo) {
+        // Backend pagination
+        maxPages = activeTab === "Sent" 
+          ? paginationInfo.total_pages_sent 
+          : paginationInfo.total_pages_unsent;
+      } else {
+        // Frontend pagination
+        maxPages = Math.ceil(allUsers?.length / itemsPerPage);
+      }
+      
+      if (page < 1 || page > maxPages) {
         return;
       }
       setCurrentPage(page);
     },
-    [allUsers?.length, itemsPerPage]
+    [allUsers?.length, itemsPerPage, viewMode, paginationInfo, activeTab]
   );
 
   const toggleItemSelection = useCallback(
@@ -83,7 +99,6 @@ const RenderAboutToExpirePage = ({
       const idKey = title === "Receipt" ? "receipt_id" : "expiry_id";
       const itemId = item[idKey];
 
-      // Prevent selection if email has already been sent for this item
       if (emailSentUsers.includes(itemId)) {
         showToast({
           type: "info",
@@ -119,7 +134,6 @@ const RenderAboutToExpirePage = ({
     }
   }, [isSelectAll, paginatedUsers, emailSentUsers, title]);
 
-  // Update isSelectAll state based on current page's selected items
   useEffect(() => {
     if (paginatedUsers?.length === 0) {
       setIsSelectAll(false);
@@ -150,7 +164,9 @@ const RenderAboutToExpirePage = ({
             type: "success",
             title: "Discount updated successfully!",
           });
-          fetchInvoiceData(localSelectedMonth, localSelectedYear); // Re-fetch data
+          if (fetchInvoiceData) {
+            fetchInvoiceData();
+          }
         } else {
           showToast({
             type: "error",
@@ -167,7 +183,7 @@ const RenderAboutToExpirePage = ({
         setIsLoading(false);
       }
     },
-    [fetchInvoiceData, localSelectedMonth, localSelectedYear]
+    [fetchInvoiceData]
   );
 
   const handleSendEmails = useCallback(async () => {
@@ -195,18 +211,20 @@ const RenderAboutToExpirePage = ({
             setEmailProgress({ sent: 0, total: selectedItems?.length });
 
             try {
-              const payload = [...selectedItems]; // Use a copy of selectedItems
+              const payload = [...selectedItems]; 
 
-              const response = await SendEstimatesToExpireMembers(payload); // Only this API for estimates
+              const response = title === "Receipt"? await SendReceiptsToPaidMembers(payload) : await SendEstimatesToExpireMembers(payload); 
 
               if (response?.status === 200) {
                 showToast({
                   type: "success",
                   title: `${payload?.length} ${title}s sent successfully!`,
                 });
-                setEmailSentUsers((prev) => [...prev, ...payload]); // Mark sent
-                setSelectedItems([]); // Clear selection after sending
-                fetchInvoiceData(localSelectedMonth, localSelectedYear); // Refresh data
+                setEmailSentUsers((prev) => [...prev, ...payload]); 
+                setSelectedItems([]); 
+                if (fetchInvoiceData) {
+                  fetchInvoiceData();
+                }
               } else {
                 showToast({
                   type: "error",
@@ -230,8 +248,6 @@ const RenderAboutToExpirePage = ({
     selectedItems,
     title,
     fetchInvoiceData,
-    localSelectedMonth,
-    localSelectedYear,
   ]);
 
   const keyExtractor = useCallback(
@@ -274,10 +290,20 @@ const RenderAboutToExpirePage = ({
       handleUpdateDiscount,
       toggleItemSelection,
       title,
+      handleOpenAboutToExpireModal,
     ]
   );
 
-  const totalPages = Math.max(1, Math.ceil(allUsers?.length / itemsPerPage));
+  const getTotalPages = () => {
+    if (viewMode === "all" && paginationInfo) {
+      return Math.max(1, activeTab === "Sent" 
+        ? paginationInfo.total_pages_sent 
+        : paginationInfo.total_pages_unsent);
+    }
+    return Math.max(1, Math.ceil(allUsers?.length / itemsPerPage));
+  };
+
+  const totalPages = getTotalPages();
 
   const ListHeader = useCallback(() => {
     return (
@@ -309,7 +335,7 @@ const RenderAboutToExpirePage = ({
               disabled={selectedItems?.length === 0 || sendingEmails}
             >
               {sendingEmails ? (
-                <Text style={styles.sendButtonText}>Sending...</Text> // Simplified progress text
+                <Text style={styles.sendButtonText}>Sending...</Text> 
               ) : (
                 <>
                   <Icon name="mail" size={18} color="white" />
@@ -351,21 +377,38 @@ const RenderAboutToExpirePage = ({
   }, [paginationLoading]);
 
   const renderPaginationInfo = useCallback(() => {
-    const start = Math.min(
-      (currentPage - 1) * itemsPerPage + 1,
-      allUsers?.length
-    );
-    const end = Math.min(currentPage * itemsPerPage, allUsers?.length);
-    const total = allUsers?.length;
+    if (viewMode === "all" && paginationInfo) {
+      const totalItems = activeTab === "Sent"
+        ? paginationInfo.total_sent
+        : paginationInfo.total_unsent;
+      const itemsOnCurrentPage = paginatedUsers?.length || 0;
+      const start = totalItems > 0 ? ((currentPage - 1) * itemsPerPage) + 1 : 0;
+      const end = Math.min(start + itemsOnCurrentPage - 1, totalItems);
 
-    if (total === 0) return null;
+      if (totalItems === 0) return null;
 
-    return (
-      <Text style={styles.paginationInfoText}>
-        Showing {start} - {end} of {total} users
-      </Text>
-    );
-  }, [currentPage, allUsers?.length, itemsPerPage]);
+      return (
+        <Text style={styles.paginationInfoText}>
+          Showing {start} - {end} of {totalItems} receipts
+        </Text>
+      );
+    } else {
+      const start = Math.min(
+        (currentPage - 1) * itemsPerPage + 1,
+        allUsers?.length || 0
+      );
+      const end = Math.min(currentPage * itemsPerPage, allUsers?.length || 0);
+      const total = allUsers?.length || 0;
+
+      if (total === 0) return null;
+
+      return (
+        <Text style={styles.paginationInfoText}>
+          Showing {start} - {end} of {total} users
+        </Text>
+      );
+    }
+  }, [currentPage, allUsers?.length, itemsPerPage, viewMode, paginationInfo, activeTab, paginatedUsers?.length]);
 
   return (
     <View style={styles.container}>
@@ -389,7 +432,8 @@ const RenderAboutToExpirePage = ({
         windowSize={itemsPerPage}
       />
 
-      {allUsers?.length > 0 && (
+      {((viewMode === "all" && paginationInfo && (paginationInfo.total_sent > 0 || paginationInfo.total_unsent > 0)) ||
+        (viewMode !== "all" && allUsers?.length > 0)) && (
         <View style={styles.paginationFooter}>
           {renderPaginationInfo()}
           <PaginationControls
@@ -407,7 +451,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA",
-    // paddingHorizontal: 15,
   },
   flatListContent: {
     paddingBottom: 20,
@@ -496,75 +539,6 @@ const styles = StyleSheet.create({
   paginationInfoText: {
     fontSize: 14,
     color: "#666",
-  },
-  // Styles for UserItem2 (assuming it's defined elsewhere or will be added)
-  // These are example styles to show what might be in UserItem2's stylesheet
-  userItemContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#C0C0C0",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
-  },
-  checkedCheckbox: {
-    backgroundColor: "#10A0F6",
-    borderColor: "#10A0F6",
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  userContact: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 2,
-  },
-  userPlan: {
-    fontSize: 14,
-    color: "#555",
-    marginTop: 2,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionButton: {
-    marginLeft: 15,
-    padding: 8,
-    borderRadius: 5,
-    backgroundColor: "#F0F0F0",
-  },
-  emailSentBadge: {
-    backgroundColor: "#d4edda",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 5,
-    marginLeft: 10,
-  },
-  emailSentText: {
-    color: "#155724",
-    fontSize: 12,
-    fontWeight: "bold",
   },
 });
 

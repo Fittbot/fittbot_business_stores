@@ -164,7 +164,7 @@ const ChangePassword = () => {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={["#202020", "#303030", "#404040"]}
+        colors={["#0a0a0a", "#0a0a0a"]}
         style={styles.background}
       >
         {/* <KeyboardAvoidingView
@@ -302,7 +302,7 @@ const ChangePassword = () => {
                 disabled={isLoading}
               >
                 <Text style={styles.loginButtonText}>
-                  {isLoading ? "UPDATING..." : "UPDATE PASSWORD"}
+                  {isLoading ? "Updating..." : "Update Password"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -375,31 +375,20 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Avenir" : "sans-serif",
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    // backgroundColor: "#FFFFFF",
     borderRadius: 20,
     width: "100%",
     maxWidth: 400,
-    paddingHorizontal: 20,
+    // paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 30,
     marginTop: height * 0.02,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-      },
-      android: {
-        elevation: 10,
-      },
-    }),
   },
   heading: {
     fontSize: 16,
     textAlign: "center",
-    fontWeight: "700",
     marginBottom: height * 0.03,
+    color:'#fff'
   },
   formContainer: {
     width: "100%",
@@ -407,22 +396,22 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8F8F8",
+    backgroundColor: "#1c1c1c",
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 15,
     paddingHorizontal: 15,
     height: 55,
-    borderWidth: 1,
     borderColor: "#EEEEEE",
   },
   inputIcon: {
     marginRight: 10,
+    color:'#fff'
   },
   input: {
     flex: 1,
     fontSize: 16,
     fontFamily: FontFamily.urbanistMedium,
-    color: "#333333",
+    color: "#fff",
   },
   errorText: {
     color: "#FF0000",
@@ -434,8 +423,11 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     backgroundColor: "#FF5757",
-    height: 55,
+    // height: 55,
+    padding:13,
     borderRadius: 12,
+    width:'70%',
+    marginHorizontal:'auto',
     justifyContent: "center",
     alignItems: "center",
     marginTop: 20,
@@ -453,10 +445,13 @@ const styles = StyleSheet.create({
   },
   loginButtonDisabled: {
     backgroundColor: "#FF5757",
-    height: 55,
+    // height: 55,
     borderRadius: 12,
+    width:'70%',
+    marginHorizontal:'auto',
     opacity: 0.5,
     justifyContent: "center",
+    padding:13,
     alignItems: "center",
     marginTop: 20,
     ...Platform.select({
@@ -472,10 +467,9 @@ const styles = StyleSheet.create({
     }),
   },
   loginButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: FontFamily.urbanistSemiBold,
     color: Color.white,
-    fontWeight: "bold",
     letterSpacing: 1,
   },
   footer: {

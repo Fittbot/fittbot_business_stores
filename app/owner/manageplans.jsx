@@ -488,7 +488,12 @@ const GymManagementPage = () => {
       );
     } else {
       // There are multiple plans/batches, navigate to assignment page
-      router.push("/owner/assignplans");
+      router.push({
+        pathname: "/owner/assignplans",
+        params: {
+          tab: activeTab === "plans" ? "Plan" : "Batch",
+        },
+      });
     }
   };
 
@@ -513,7 +518,21 @@ const GymManagementPage = () => {
       />
 
       <TabHeader tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-
+      <TouchableOpacity
+        style={styles.reassignButton}
+        onPress={() =>
+          router.push({
+            pathname: "/owner/assignplans",
+            params: {
+              tab: activeTab === "plans" ? "Plan" : "Batch",
+            },
+          })
+        }
+      >
+        <Text style={styles.reassignButtonText}>
+          Reassign {activeTab === "plans" ? "Plans" : "Batches"}
+        </Text>
+      </TouchableOpacity>
       <View style={styles.listContainer}>
         <FlatList
           data={activeTab === "plans" ? plans : batches}
@@ -596,6 +615,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
+  },
+  reassignButton: {
+    alignSelf: "flex-end",
+    backgroundColor: "#0078FF",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginRight: 15,
+    marginTop: 5,
+  },
+  reassignButtonText: {
+    color: "#FFFFFF",
   },
   header: {
     padding: 15,

@@ -8,6 +8,8 @@ import {
   View,
   StyleSheet,
   Platform,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { generateRandomSentence } from "../../utils/generateRandomData";
 import {
@@ -71,15 +73,6 @@ const enquiryFormSchema = createValidationSchema({
 
 function NewEnquiryForm({ addNewEnquiry }) {
   const [formData, setFormData] = useState({
-    // name: `Alone+${Math.random().toString(36).substring(7)}`,
-    // contact: `${Math.floor(Math.random() * 10000000000)}`,
-    // convenientTime: `${Math.floor(Math.random() * 12)}am-${Math.floor(
-    //   Math.random() * 12
-    // )}pm`,
-    // email: `${Math.random().toString(36).substring(7)}@example.com`,
-    // message: generateRandomSentence(),
-    // date: new Date().toISOString(),
-
     name: "",
     contact: "",
     convenientTime: "",
@@ -94,8 +87,80 @@ function NewEnquiryForm({ addNewEnquiry }) {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // Store actual Date objects for the pickers
+  const [startTimeDate, setStartTimeDate] = useState(new Date());
+  const [endTimeDate, setEndTimeDate] = useState(new Date());
+
+  // Add temporary time states for iOS picker
+  const [tempStartTime, setTempStartTime] = useState(new Date());
+  const [tempEndTime, setTempEndTime] = useState(new Date());
+
   const handleChange = (name, value) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Updated time change handlers for iOS/Android compatibility
+  const handleStartTimeChange = (event, selectedTime) => {
+    if (Platform.OS === "android") {
+      setShowStartTimePicker(false);
+      if (selectedTime) {
+        setStartTimeDate(selectedTime);
+        handleChange("startTime", getFormattedTime(selectedTime.getTime()));
+      }
+    } else {
+      // iOS - just update temp time
+      if (selectedTime) {
+        setTempStartTime(selectedTime);
+      }
+    }
+  };
+
+  const handleEndTimeChange = (event, selectedTime) => {
+    if (Platform.OS === "android") {
+      setShowEndTimePicker(false);
+      if (selectedTime) {
+        setEndTimeDate(selectedTime);
+        handleChange("endTime", getFormattedTime(selectedTime.getTime()));
+      }
+    } else {
+      // iOS - just update temp time
+      if (selectedTime) {
+        setTempEndTime(selectedTime);
+      }
+    }
+  };
+
+  // iOS picker confirmation handlers
+  const confirmStartTimeSelection = () => {
+    setStartTimeDate(tempStartTime);
+    handleChange("startTime", getFormattedTime(tempStartTime.getTime()));
+    setShowStartTimePicker(false);
+  };
+
+  const confirmEndTimeSelection = () => {
+    setEndTimeDate(tempEndTime);
+    handleChange("endTime", getFormattedTime(tempEndTime.getTime()));
+    setShowEndTimePicker(false);
+  };
+
+  // Cancel handlers for iOS
+  const cancelStartTimeSelection = () => {
+    setShowStartTimePicker(false);
+  };
+
+  const cancelEndTimeSelection = () => {
+    setShowEndTimePicker(false);
+  };
+
+  // Functions to open time pickers
+  const openStartTimePicker = () => {
+    setTempStartTime(startTimeDate); // Use the current selected time, not new Date()
+    setShowStartTimePicker(true);
+  };
+
+  const openEndTimePicker = () => {
+    setTempEndTime(endTimeDate); // Use the current selected time, not new Date()
+    setShowEndTimePicker(true);
   };
 
   const handleSubmit = async () => {
@@ -127,13 +192,20 @@ function NewEnquiryForm({ addNewEnquiry }) {
           title: response?.message,
           visibilityTime: 1500,
         });
+
+        // Reset form including Date objects
+        const currentTime = new Date();
         setFormData({
           name: "",
           contact: "",
           convenientTime: "",
           email: "",
           message: "",
+          startTime: getFormattedTime(currentTime.getTime()),
+          endTime: getFormattedTime(currentTime.getTime()),
         });
+        setStartTimeDate(currentTime);
+        setEndTimeDate(currentTime);
         setFormErrors({});
       }
     } else {
@@ -202,36 +274,99 @@ function NewEnquiryForm({ addNewEnquiry }) {
           Convenient Time (from-to) <Text style={styles.required}>*</Text>
         </Text>
 
-        {showStartTimePicker && (
+        {/* iOS Start Time Picker Modal */}
+        {Platform.OS === "ios" && showStartTimePicker && (
+          <Modal
+            transparent={true}
+            animationType="slide"
+            visible={showStartTimePicker}
+            onRequestClose={cancelStartTimeSelection}
+          >
+            <TouchableWithoutFeedback onPress={cancelStartTimeSelection}>
+              <View style={styles.pickerModalContainer}>
+                <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                  <View style={styles.pickerContainer}>
+                    <View style={styles.pickerHeader}>
+                      <TouchableOpacity onPress={cancelStartTimeSelection}>
+                        <Text style={styles.pickerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.pickerTitle}>Select Start Time</Text>
+                      <TouchableOpacity onPress={confirmStartTimeSelection}>
+                        <Text style={styles.pickerConfirmText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={tempStartTime}
+                      mode="time"
+                      display="spinner"
+                      themeVariant="light"
+                      textColor="#000000"
+                      onChange={handleStartTimeChange}
+                      style={styles.iosPickerStyle}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+        )}
+
+        {/* iOS End Time Picker Modal */}
+        {Platform.OS === "ios" && showEndTimePicker && (
+          <Modal
+            transparent={true}
+            animationType="slide"
+            visible={showEndTimePicker}
+            onRequestClose={cancelEndTimeSelection}
+          >
+            <TouchableWithoutFeedback onPress={cancelEndTimeSelection}>
+              <View style={styles.pickerModalContainer}>
+                <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                  <View style={styles.pickerContainer}>
+                    <View style={styles.pickerHeader}>
+                      <TouchableOpacity onPress={cancelEndTimeSelection}>
+                        <Text style={styles.pickerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.pickerTitle}>Select End Time</Text>
+                      <TouchableOpacity onPress={confirmEndTimeSelection}>
+                        <Text style={styles.pickerConfirmText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={tempEndTime}
+                      mode="time"
+                      display="spinner"
+                      themeVariant="light"
+                      textColor="#000000"
+                      onChange={handleEndTimeChange}
+                      style={styles.iosPickerStyle}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+        )}
+
+        {/* Android Time Pickers */}
+        {Platform.OS === "android" && showStartTimePicker && (
           <DateTimePicker
-            value={new Date()}
+            value={startTimeDate}
             mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              setShowStartTimePicker(false);
-              if (selectedDate) {
-                handleChange(
-                  "startTime",
-                  getFormattedTime(selectedDate.getTime())
-                );
-              }
-            }}
+            themeVariant="light"
+            textColor="#000000"
+            display="default"
+            onChange={handleStartTimeChange}
           />
         )}
-        {showEndTimePicker && (
+        {Platform.OS === "android" && showEndTimePicker && (
           <DateTimePicker
-            value={new Date()}
+            value={endTimeDate}
             mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              setShowEndTimePicker(false);
-              if (selectedDate) {
-                handleChange(
-                  "endTime",
-                  getFormattedTime(selectedDate.getTime())
-                );
-              }
-            }}
+            themeVariant="light"
+            textColor="#000000"
+            display="default"
+            onChange={handleEndTimeChange}
           />
         )}
 
@@ -245,7 +380,7 @@ function NewEnquiryForm({ addNewEnquiry }) {
         >
           <TouchableOpacity
             style={styles.inputWrapper}
-            onPress={() => setShowStartTimePicker(!showStartTimePicker)}
+            onPress={openStartTimePicker}
           >
             <Ionicons
               name="time-outline"
@@ -266,7 +401,7 @@ function NewEnquiryForm({ addNewEnquiry }) {
 
           <TouchableOpacity
             style={styles.inputWrapper}
-            onPress={() => setShowEndTimePicker(!showEndTimePicker)}
+            onPress={openEndTimePicker}
           >
             <Ionicons
               name="time-outline"
@@ -326,7 +461,6 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     fontSize: 14,
-    // fontWeight: 'bold',
     marginBottom: 20,
     color: "#007AFF",
   },
@@ -355,14 +489,6 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   submitButton: {
-    // backgroundColor: '#FF5757',
-    // paddingVertical: 14,
-    // borderRadius: 5,
-    // alignItems: 'center',
-    // marginTop: 10,
-    // marginBottom: 30,
-
-    // flexDirection: 'row',
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#007AFF",
@@ -371,10 +497,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   submitButtonText: {
-    // color: '#fff',
-    // fontSize: 16,
-    // fontWeight: 'bold',
-
     color: "#FFFFFF",
     fontWeight: "600",
     marginLeft: 8,
@@ -383,9 +505,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    // backgroundColor: '#F8F8F8',
     borderRadius: 5,
-    // marginBottom: 15,
     paddingHorizontal: 15,
     height: 40,
     borderWidth: 0.5,
@@ -404,5 +524,42 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: "#888888",
+  },
+  pickerModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  pickerConfirmText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  iosPickerStyle: {
+    height: 200,
+    width: "100%",
   },
 });
